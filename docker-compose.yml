@@ -1,9 +1,10 @@
 version: "3.9"
 services:
   php:
-    image: "mmhk/php-docker:8-fpm"
+    image: "mmhk/php-docker:7.2-fpm"
     volumes:
       - .:/var/www/html
+      - ../:/var/www
     environment:
       WWW_UID: 1000
       WWW_GID: 1000
@@ -15,5 +16,6 @@ services:
       - "80:80"
     volumes:
       - .:/var/www/html
+      - ../:/var/www
     links:
      - "php"
