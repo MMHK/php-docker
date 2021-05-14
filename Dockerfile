@@ -1,4 +1,4 @@
-FROM php:8-cli-alpine
+FROM php:7.0.33-cli-alpine
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
