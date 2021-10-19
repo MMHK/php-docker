@@ -11,7 +11,7 @@ services:
   nginx:
     depends_on:
        - php
-    image: "mmhk/php-docker:8-fpm-nginx"
+    image: "mmhk/php-docker:nginx-ws-fpm"
     ports:
       - "80:80"
     volumes:
@@ -19,3 +19,6 @@ services:
       - ../.:/var/www
     links:
      - "php"
+    environment:
+      WS_PROXY_HOST: "http://php:5342"
+      FPM_HOST: "php:9000"

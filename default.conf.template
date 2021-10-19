@@ -20,6 +20,14 @@ server {
                     rewrite (.*) /index.php last;
            }
     }
+    
+    # proxy to local proxy
+    location /io/ {
+            proxy_pass ${WS_PROXY_HOST};
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "Upgrade";
+    }
 
     # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
     #
@@ -28,7 +36,7 @@ server {
             fastcgi_index  index.php;
             fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
             include        /etc/nginx/fastcgi_params;
-            fastcgi_pass   php:9000;
+            fastcgi_pass   ${FPM_HOST};
 
             fastcgi_read_timeout 90;
     }
