@@ -34,6 +34,6 @@
 
 ```
 cd [你的项目public目录]
-wget "https://raw.githubusercontent.com/MMHK/php-docker/8-fpm-nginx/docker-compose.yml"
-docker-compose up
+wget "https://raw.githubusercontent.com/MMHK/php-docker/nginx-ws-fpm/docker-compose.yml"
+docker-compose up nginx
 ```
