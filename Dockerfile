@@ -15,6 +15,7 @@ RUN install-php-extensions @composer gd memcached gettext imagick mcrypt mysqli 
  && usermod -u $WWW_UID www-data \
  && groupmod -g $WWW_GID www-data
 
+USER www-data:www-data
 
 EXPOSE 9000
 CMD ["php-fpm"]
