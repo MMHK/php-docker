@@ -18,4 +18,8 @@ RUN install-php-extensions @composer gd memcached gettext imagick mcrypt mysqli 
 USER www-data:www-data
 
 EXPOSE 9000
+
+COPY entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
 CMD ["php-fpm"]
