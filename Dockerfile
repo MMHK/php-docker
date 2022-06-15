@@ -26,6 +26,7 @@ EXPOSE 9000
 
 USER www-data:www-data
 
+COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
