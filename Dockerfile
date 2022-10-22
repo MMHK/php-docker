@@ -1,11 +1,14 @@
-FROM nginx:alpine
+FROM caddy:2.6.2-alpine
 
-ENV WS_PROXY_HOST="http://php:5343" \
-   FPM_HOST="php:9000"
+ENV WWW_UID=1000
+ENV WWW_GID=1000
 
-WORKDIR /app
+COPY errors.html /etc/caddy/error/error.html
+COPY Caddyfile /etc/caddy/Caddyfile
 
-COPY . .
-
-RUN mkdir -p /etc/nginx/templates \
-    && cp /app/default.conf.template /etc/nginx/templates/default.conf.template
+RUN apk --no-cache add shadow \
+  && groupmod -g $WWW_GID www-data \
+  && useradd -u $WWW_UID -g $WWW_GID www-data \
+  && umask 0000
+  
+USER www-data:www-data

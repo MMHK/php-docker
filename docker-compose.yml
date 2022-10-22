@@ -1,24 +1,23 @@
-version: "3.9"
+version: "3"
 services:
   php:
-    image: "mmhk/php-docker:8-fpm"
+    image: "mmhk/php-docker:7.2-fpm"
     volumes:
-      - .:/var/www/html
-      - ../.:/var/www
+      - ../:/var/www
+      - ./.:/var/www/html
     environment:
       WWW_UID: 1000
       WWW_GID: 1000
-  nginx:
     depends_on:
-       - php
-    image: "mmhk/php-docker:nginx-ws-fpm"
-    ports:
-      - "80:80"
-    volumes:
-      - .:/var/www/html
-      - ../.:/var/www
+      - redis
     links:
-     - "php"
-    environment:
-      WS_PROXY_HOST: "http://php:5342"
-      FPM_HOST: "php:9000"
+      - "redis"
+  caddy:
+    depends_on:
+      - php
+    image: "mmhk/php-docker:fpm-caddy-2.6.2"
+    volumes:
+      - ../:/var/www
+      - ./.:/var/www/html
+    links:
+      - "php"

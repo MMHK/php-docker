@@ -1,0 +1,34 @@
+:80 {
+	root * /var/www/html
+	encode zstd gzip
+
+	log {
+		level DEBUG
+	}
+	
+	header -Server
+	header -X-Powered-By
+	
+	route {
+		@phpFiles {
+			path *.php
+		}
+		@fileNotExist {
+		   not file {path} {path}/index.html
+		}
+
+		rewrite @fileNotExist index.php
+		php_fastcgi @phpFiles php:9000 {
+			split .php
+		}
+	}
+	
+	file_server
+
+	handle_errors {
+		root * /etc/caddy/error
+		rewrite * /error.html
+		templates
+		file_server
+	}
+}
