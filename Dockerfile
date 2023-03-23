@@ -2,7 +2,8 @@ FROM caddy:2.6.2-builder-alpine AS builder
 
 RUN go env -w GOPROXY=https://goproxy.cn,direct \
   && xcaddy build \
-    --with clevergo.tech/caddy-dnspodcn
+    --with clevergo.tech/caddy-dnspodcn \
+    --with github.com/imgk/caddy-trojan
 
 FROM caddy:2.6.2-alpine
 
