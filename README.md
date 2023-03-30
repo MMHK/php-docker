@@ -4,10 +4,12 @@
 
 ### Environment
 
-|||
-|-|-|
-|WWW_UID|www-data(容器自带fpm执行账户)账户的UID|
-|WWW_GID|www-data(容器自带fpm执行账户)账户的GID|
+|ENV|remark|default value|
+|-|-|-|
+|WWW_UID|www-data(容器自带fpm执行账户)账户的UID|1000|
+|WWW_GID|www-data(容器自带fpm执行账户)账户的GID|1000|
+|OPCACHE_JIT|对应php.ini `opcache.jit`|tracing|
+|OPCACHE_JIT_BUFFER|对应php.ini `opcache.jit_buffer_size`|128M|
 
 ### 已安装扩展
 
