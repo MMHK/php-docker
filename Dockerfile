@@ -7,26 +7,15 @@ ENV WWW_GID=1000
 ENV TZ=Asia/Hong_Kong
 
 ## add laster ca cert
-# COPY docker-php-ext-pecl.ini /usr/local/etc/php/conf.d/docker-php-ext-pecl.ini
+ADD cacert.ini /usr/local/etc/php/conf.d/docker-php-ext-openssl.ini
 RUN apk --no-cache add ca-certificates \
   && curl -sSLk https://curl.se/ca/cacert.pem -o /usr/local/share/ca-certificates/curl-ca.crt \
   && chmod 644 /usr/local/share/ca-certificates/curl-ca.crt \
   && update-ca-certificates
 
 # fix work iconv library with alpine
-RUN apk --no-cache add make gcc g++ libtool  \
-  && curl -sSLk https://ftp.gnu.org/gnu/libiconv/libiconv-1.14.tar.gz -o /tmp/libiconv-1.14.tar.gz \
-  && tar xzf /tmp/libiconv-1.14.tar.gz -C /tmp  \
-  && cd /tmp/libiconv-1.14 \
-  && sed -i 's/_GL_WARN_ON_USE (gets, "gets is a security hole - use fgets instead");/#if HAVE_RAW_DECL_GETS\n_GL_WARN_ON_USE (gets, "gets is a security hole - use fgets instead");\n#endif/g' srclib/stdio.in.h \
-  && ./configure --prefix=/usr/local \
-  && make \
-  && make install \
-  && libtool --finish /usr/local/lib \
-  && cd .. \
-  && rm -Rf /tmp/libiconv-1.14 \
-  && apk del make gcc g++ libtool 
-ENV LD_PRELOAD /usr/local/lib/preloadable_libiconv.so
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/v3.10/community/ --allow-untrusted gnu-libiconv
+ENV LD_PRELOAD /usr/lib/preloadable_libiconv.so
 
 
 # base layer
