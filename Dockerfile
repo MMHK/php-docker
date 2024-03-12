@@ -23,8 +23,8 @@ RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/p
  && sed -i -e "s/pm.max_spare_servers = 3/pm.max_spare_servers = 10/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;pm.max_requests = 500/pm.max_requests = 5/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;php_admin_flag\[log_errors\]/php_admin_flag\[log_errors\]/g" /usr/local/etc/php-fpm.d/*.conf \
- && echo -e "php_admin_value[opcache.jit]=${OPCACHE_JIT}\n" >> /usr/local/etc/php-fpm.d/www.conf \
- && echo -e "php_admin_value[opcache.jit_buffer_size]=${OPCACHE_JIT_BUFFER}\n" >> /usr/local/etc/php-fpm.d/www.conf \
+ && echo "php_admin_value[opcache.jit]=${OPCACHE_JIT}\n" >> /usr/local/etc/php-fpm.d/www.conf \
+ && echo "php_admin_value[opcache.jit_buffer_size]=${OPCACHE_JIT_BUFFER}\n" >> /usr/local/etc/php-fpm.d/www.conf \
  && usermod -u $WWW_UID www-data \
  && groupmod -g $WWW_GID www-data
 
