@@ -1,14 +1,15 @@
-FROM php:8.2.0-fpm-alpine
+FROM php:8.2.0-fpm-bullseye
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
+ENV TZ=Asia/Hong_Kong
 ENV WWW_UID=1000
 ENV WWW_GID=1000
 ENV OPCACHE_JIT=tracing
 ENV OPCACHE_JIT_BUFFER=128M
 
-RUN install-php-extensions @composer gd memcached gettext imagick mcrypt mysqli redis pdo_mysql opcache exif bcmath soap sockets timezonedb zip snmp bz2 ffi \
- && apk --no-cache add shadow \
+RUN apt-get update && apt-get install -y tzdata sudo \
+ && install-php-extensions @composer gd memcached gettext imagick mcrypt mysqli redis pdo_mysql opcache exif bcmath soap sockets timezonedb zip snmp bz2 ffi \
  && sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/php_admin_value[error_log]=\/proc\/self\/fd\/2/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;chdir =/chdir =/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;rlimit_files = 1024/rlimit_files = 102400/g" /usr/local/etc/php-fpm.d/*.conf \
