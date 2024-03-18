@@ -28,6 +28,8 @@ RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/p
  && usermod -u $WWW_UID www-data \
  && groupmod -g $WWW_GID www-data
 
+RUN install-php-extensions gmp
+
 
 EXPOSE 9000
 
