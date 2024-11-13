@@ -29,12 +29,15 @@ RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/p
  && groupmod -g $WWW_GID www-data
 
 
+WORKDIR /app
+
 EXPOSE 9000
+
+COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
+COPY entrypoint.sh /app/entrypoint.sh
 
 USER www-data:www-data
 
-COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
-COPY entrypoint.sh /entrypoint.sh
-ENTRYPOINT ['/entrypoint.sh']
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["php-fpm"]
