@@ -1,8 +1,16 @@
 FROM caddy:2.6.2-builder-alpine AS builder
 
-RUN go env -w GOPROXY=https://goproxy.cn,direct \
-  && xcaddy build \
-    --with clevergo.tech/caddy-dnspodcn
+ENV GORPOXY=direct
+
+WORKDIR /app
+
+COPY main.go /app/main.go
+COPY go.mod /app/go.mod
+COPY go.sum /app/go.sum
+COPY vendor /app/vendor
+
+RUN go env \
+   && go build -ldflags="-s -w" -o  /usr/bin/caddy .
 
 FROM caddy:2.6.2-alpine
 
