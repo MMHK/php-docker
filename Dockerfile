@@ -4,13 +4,10 @@ ENV GORPOXY=direct
 
 WORKDIR /app
 
-COPY main.go /app/main.go
-COPY go.mod /app/go.mod
-COPY go.sum /app/go.sum
-COPY vendor /app/vendor
-
-RUN go env \
-   && go build -ldflags="-s -w" -o  /usr/bin/caddy .
+RUN xcaddy build \
+  --output /usr/bin/caddy \
+  --with github.com/mmhk/caddy-dnspodcn \
+  --with github.com/corazawaf/coraza-caddy
 
 FROM caddy:2.6.2-alpine
 
@@ -25,5 +22,7 @@ RUN apk --no-cache add shadow tzdata \
   && groupmod -g $WWW_GID www-data \
   && useradd -u $WWW_UID -g $WWW_GID www-data \
   && umask 0000
+
+ENV TZ=Asia/Hong_Kong
 
 USER www-data:www-data

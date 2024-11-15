@@ -1,115 +1,115 @@
 {
-    admin off
+	admin off
+	order coraza_waf first
 }
 (log_file) {
-    log {
-        level ERROR
-        output stdout
-    }
+	log {
+		level ERROR
+		output stdout
+	}
 }
 (static) {
-    @static {
-        file
-        path *.ico *.css *.js *.gif *.jpg *.jpeg *.png * .svg *.woff *.woff2 *.json *.webp
-    }
-    header @static Cache-Control max-age=5184000
+	@static {
+		file
+		path *.ico *.css *.js *.gif *.jpg *.jpeg *.png * .svg *.woff *.woff2 *.json *.webp
+	}
+	header @static Cache-Control max-age=5184000
 }
 (security) {
-    header {
-        # enable HSTS
-        Strict-Transport-Security max-age=31536000;
+	header {
+		# enable HSTS
+		Strict-Transport-Security max-age=31536000;
 
-        # disable clients from sniffing the media type
-        # X-Content-Type-Options nosniff
+		# disable clients from sniffing the media type
+		# X-Content-Type-Options nosniff
 
-        # clickjacking protection
-        # X-Frame-Options SAMEORIGIN
+		# clickjacking protection
+		# X-Frame-Options SAMEORIGIN
 
-        # keep referrer data off of HTTP connections
-        # Referrer-Policy no-referrer-when-downgrade
+		# keep referrer data off of HTTP connections
+		# Referrer-Policy no-referrer-when-downgrade
 
-        # Content Security Policy
-        # Content-Security-Policy "base-uri 'self'; default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:"
-    }
+		# Content Security Policy
+		# Content-Security-Policy "base-uri 'self'; default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data:"
+	}
 }
 (production_error_hader) {
-    handle_errors {
-        root * /var/www/default
-        rewrite * /errors.html
-        templates
-        file_server
-    }
+	handle_errors {
+		root * /var/www/html
+		rewrite * /errors.html
+		templates
+		file_server
+	}
 }
 (internal_only) {
-    @denied not remote_ip private_ranges
-    abort @denied
+	@denied not remote_ip private_ranges
+	abort @denied
+}
+(php_fpm) {
+    @phpFiles {
+        path *.php
+    }
+    php_fastcgi @phpFiles php:9000 {
+        split .php
+    }
+}
+(rewrite_index_php) {
+    try_files {path} {path}/index.html {path}/index.php index.php
+}
+(waf) {
+    coraza_waf {
+        include /etc/coraza/coraza.conf-recommended
+        include /etc/coraza/coreruleset/crs-setup.conf.example
+        include /etc/coraza/coreruleset/rules/*.conf
+    }
 }
 (std_site) {
-    encode zstd gzip
-
-    import log_file
-    import static
-    import security
-
-    tls sam@mixmedia.com {
-        dns dnspodcn {env.DNSPOD_APP_ID} {env.DNSPOD_APP_TOKEN}
-    }
-
-    header -Server
-    header -X-Powered-By
-    header Service-By "demo3-https"
-    header X-Robots-Tag "noindex"
-
-    respond /robots.txt "User-Agent: *
-Disallow: /
-Disallow: /*.php
-Disallow: /*.swf" 200 {
-        close
-    }
-
-    @bots {
-        header User-Agent *bot*
-    }
-
-    respond @bots 403 {
-        close
-    }
-
-    file_server
-
-    import production_error_hader
-}
-:80 {
-	root * /var/www/html
 	encode zstd gzip
 
-	log {
-		level DEBUG
-	}
+	import log_file
+	import static
+	import security
+
+	#    tls sam@mixmedia.com {
+	#        dns dnspodcn {env.DNSPOD_APP_ID} {env.DNSPOD_APP_TOKEN}
+	#    }
 
 	header -Server
 	header -X-Powered-By
+	header Service-By "demo3-https"
+	header X-Robots-Tag "noindex"
 
-	route {
-		@phpFiles {
-			path *.php
-		}
-		@fileNotExist {
-		   not file {path} {path}/index.html
-		}
+	respond /robots.txt "User-Agent: *
+Disallow: /
+Disallow: /*.php
+Disallow: /*.swf" 200 {
+		close
+	}
 
-		rewrite @fileNotExist index.php
-		php_fastcgi @phpFiles php:9000 {
-			split .php
-		}
+	@bots {
+		header User-Agent *bot*
+	}
+
+	respond @bots 403 {
+		close
 	}
 
 	file_server
 
-	handle_errors {
-		root * /etc/caddy/error
-		rewrite * /error.html
-		templates
-		file_server
-	}
+	import production_error_hader
+}
+
+:80 {
+	root * /var/www/html
+
+	import waf
+
+    # import internal_only
+
+    route {
+        import rewrite_index_php
+        import php_fpm
+    }
+
+	import std_site
 }

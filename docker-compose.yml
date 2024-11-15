@@ -2,9 +2,11 @@ version: "3"
 services:
   php:
     image: "mmhk/php-docker:8.0-fpm"
+    container_name: php-80-fpm
+    restart: always
     volumes:
-      - ../:/var/www
-      - ./.:/var/www/html
+      - ./tests/www:/var/www
+      - ./tests/www/html:/var/www/html
     environment:
       WWW_UID: 1000
       WWW_GID: 1000
@@ -16,16 +18,32 @@ services:
   caddy:
     depends_on:
       - php
-    image: "mmhk/php-docker:fpm-caddy-2.6.2"
+    image: "mmhk/php-docker:fpm-with-waf-caddy-2.6.2"
+    container_name: caddy-server
+    restart: always
     environment:
       - TZ=Asia/Hong_Kong
     volumes:
-      - ../:/var/www
-      - ./.:/var/www/html
+      - ./tests/www:/var/www
+      - ./tests/www/html:/var/www/html
+      - ./errors.html:/var/www/html/errors.html
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./coraza:/etc/coraza
     links:
       - "php"
+    ports:
+      - 8081:80
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "5"
+  frpc:
+    depends_on:
+      - caddy
+    image: "snowdreamtech/frpc:0.36.2"
+    restart: always
+    volumes:
+      - ./tests/frpc.ini:/etc/frp/frpc.ini
+    links:
+      - "caddy"
