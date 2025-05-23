@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  php-docker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    image: mmhk/php-docker:8.3-fpm
