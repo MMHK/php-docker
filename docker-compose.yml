@@ -1,5 +1,11 @@
 version: "3"
 services:
+  build-img:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: "mmhk/php-docker:caddy-2.8.1-aliyun"
+
   php:
     image: "mmhk/php-docker:8.0-fpm"
     container_name: php-80-fpm

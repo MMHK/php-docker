@@ -1,4 +1,4 @@
-FROM caddy:2.6.2-builder-alpine AS builder
+FROM caddy:2.8.1-builder-alpine AS builder
 
 ENV GORPOXY=direct
 
@@ -7,9 +7,10 @@ WORKDIR /app
 RUN xcaddy build \
   --output /usr/bin/caddy \
   --with github.com/mmhk/caddy-dnspodcn \
-  --with github.com/corazawaf/coraza-caddy
+  --with github.com/caddyserver/cache-handler@v0.13.0 \
+  --with github.com/mholt/caddy-ratelimit@v0.1.0
 
-FROM caddy:2.6.2-alpine
+FROM caddy:2.8.1-alpine
 
 ENV WWW_UID=1000
 ENV WWW_GID=1000

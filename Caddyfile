@@ -1,6 +1,8 @@
 {
 	admin off
-	order coraza_waf first
+    # 全局設定：定義速率限制區 (Rate Limit Zone)
+    order rate_limit before basicauth
+    order cache before rewrite
 }
 (log_file) {
 	log {
@@ -61,6 +63,56 @@
         include /etc/coraza/coraza.conf-recommended
         include /etc/coraza/coreruleset/crs-setup.conf.example
         include /etc/coraza/coreruleset/rules/*.conf
+    }
+}
+(defense_ratelimit) {
+    rate_limit {
+        zone defence_zone {
+            key    {remote_host}
+            events 5
+            window 1s
+        }
+    }
+}
+(static_cache) {
+    cache {
+        # 設定要快取的檔案類型
+        match_path *.png *.jpg *.jpeg *.gif *.webp *.css *.js *.svg *.ico *.woff *.woff2
+
+        # 設定要快取的 Content-Type
+        match_header Content-Type image/* text/css application/javascript font/*
+
+        # 預設快取時間 (例如 24 小時)
+        default_max_age 24h
+
+        # (選用) 忽略 query string，防止 ?v=123 這種 Cache Busting 攻擊
+        # key_fields {
+        #     ignore_query_params yes
+        # }
+    }
+}
+(block_bad_guys) {
+    @bad_actors {
+        # 根據你的 Log 封鎖的惡意網段
+        remote_ip 116.0.0.0/8 14.0.0.0/8
+
+        # 封鎖可疑的 User-Agent
+        header User-Agent "*Go-http-client*"
+        header User-Agent "*curl*"
+        header User-Agent "*python*"
+    }
+    respond @bad_actors "Access Denied" 403
+}
+(aws_transport_config) {
+    transport http {
+        # 讀取上游回應的 Body 逾時
+        read_body 10s
+        # 讀取上游回應 Header 逾時
+        read_header 5s
+        # 寫入請求給上游的逾時
+        write 10s
+        # 閒置連線保持時間
+        idle 1m
     }
 }
 (std_site) {
