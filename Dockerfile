@@ -9,7 +9,6 @@ RUN apk add --no-cache git ca-certificates curl
 
 #  build
 RUN go version \
-  && export GOPROXY=direct \
   && xcaddy build \
   --output /usr/bin/caddy \
   --with github.com/mmhk/caddy-dnspodcn \
