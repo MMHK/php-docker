@@ -13,7 +13,7 @@ RUN go version \
   && xcaddy build \
   --output /usr/bin/caddy \
   --with github.com/mmhk/caddy-dnspodcn \
-  --with github.com/corazawaf/coraza-caddy
+  --with github.com/corazawaf/coraza-caddy@v1.2.2
 
 FROM caddy:2.6.2-alpine
 
