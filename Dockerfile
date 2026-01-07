@@ -4,7 +4,13 @@ ENV GORPOXY=direct
 
 WORKDIR /app
 
-RUN xcaddy build \
+# prepare  build
+RUN apk add --no-cache git ca-certificates curl
+
+#  build
+RUN go version \
+  && export GOPROXY=direct \
+  && xcaddy build \
   --output /usr/bin/caddy \
   --with github.com/mmhk/caddy-dnspodcn \
   --with github.com/corazawaf/coraza-caddy
