@@ -1,6 +1,6 @@
 FROM php:8.0-fpm-bullseye
 
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 
 ENV TZ=Asia/Hong_Kong
 ENV WWW_UID=1000
@@ -10,7 +10,7 @@ ENV OPCACHE_JIT_BUFFER=128M
 
 # base layer
 RUN apt-get update && apt-get install -y tzdata sudo \
- && install-php-extensions @composer gd memcached gettext imagick mcrypt mysqli redis pdo_mysql opcache exif bcmath soap sockets timezonedb zip snmp bz2 shmop ffi \
+ && install-php-extensions @composer gd memcached gmp gettext imagick mcrypt mysqli redis pdo_mysql opcache exif bcmath soap sockets timezonedb zip snmp bz2 shmop ffi \
  && rm -rf /var/lib/apt/lists/*
 
 # config layer
@@ -34,8 +34,6 @@ USER www-data:www-data
 
 COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
 COPY entrypoint.sh /entrypoint.sh
-ENTRYPOINT []
-
-
+ENTRYPOINT ["/entrypoint.sh"]
 
 CMD ["php-fpm"]
