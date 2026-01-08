@@ -8,7 +8,7 @@ services:
       platforms:
         - "linux/amd64"
         - "linux/arm64"
-    image: "mmhk/php-docker:fpm-with-waf-caddy-2.6.2"
+    image: "mmhk/php-docker:caddy-2.8.4-with-waf"
 
   php:
     image: "mmhk/php-docker:8.0-fpm"
@@ -28,7 +28,7 @@ services:
   caddy:
     depends_on:
       - php
-    image: "mmhk/php-docker:fpm-with-waf-caddy-2.6.2"
+    image: "mmhk/php-docker:caddy-2.8.4-with-waf"
     container_name: caddy-server
     restart: always
     environment:

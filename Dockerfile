@@ -1,4 +1,4 @@
-FROM caddy:2.6.2-builder-alpine AS builder
+FROM caddy:2.8.4-builder-alpine AS builder
 
 ENV GORPOXY=direct
 
@@ -12,9 +12,9 @@ RUN go version \
   && xcaddy build \
   --output /usr/bin/caddy \
   --with github.com/mmhk/caddy-dnspodcn \
-  --with github.com/corazawaf/coraza-caddy@v1.2.2
+  --with github.com/corazawaf/coraza-caddy@v2.0.0
 
-FROM caddy:2.6.2-alpine
+FROM caddy:2.8.4-alpine
 
 ENV WWW_UID=1000
 ENV WWW_GID=1000
