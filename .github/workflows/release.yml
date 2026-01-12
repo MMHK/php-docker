@@ -40,6 +40,6 @@ jobs:
           context: .  # 建置上下文（包含Dockerfile的目錄）
           push: true  # 推送至Docker Hub
           platforms: linux/amd64,linux/arm64  # 只構建 amd64 和 arm64 架構
-          tags: ${{ secrets.DOCKERHUB_TEAM }}/php-docker:${{ github.ref_name && github.ref_name.substring(1)
+          tags: ${{ secrets.DOCKERHUB_TEAM }}/php-docker:${{ github.ref_name && github.ref_name.substring(1) }}
           cache-from: type=gha  # 使用GitHub Actions快取加速建置
           cache-to: type=gha,mode=max
