@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: "mmhk/php-docker:caddy-2.8.1-aliyun"
+    image: "mmhk/php-docker:caddy-2.8.4-aliyun"
 
   php:
     image: "mmhk/php-docker:8.0-fpm"
