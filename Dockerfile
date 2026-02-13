@@ -1,12 +1,12 @@
-FROM caddy:2.8.1-builder-alpine AS builder
+FROM caddy:2.8.4-builder-alpine AS builder
 
-ENV GORPOXY=direct
+ENV GORPOXY=https://goproxy.io,direct
 
 WORKDIR /app
 
 RUN xcaddy build \
   --output /usr/bin/caddy \
-  --with github.com/mmhk/caddy-dnspodcn \
+  --with github.com/caddy-dns/tencentcloud@v0.2.1 \
   --with github.com/caddyserver/cache-handler@v0.13.0 \
   --with github.com/mholt/caddy-ratelimit@v0.1.0
 
