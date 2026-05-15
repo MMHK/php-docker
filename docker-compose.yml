@@ -7,4 +7,6 @@ services:
       platforms:
         - "linux/amd64"
         - "linux/arm64"
-    image: mmhk/php-docker:8.3-fpm
+      tags:
+        - mmhk/php-docker:8-fpm
+    image: mmhk/php-docker:8.4-fpm
