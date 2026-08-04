@@ -1,8 +1,10 @@
+vendor
 tests
 coraza
-vendor
 README.md
 LICENSE
 .gitignore
 .git
 .idea
+.dockerignore
+docker-compose.yml

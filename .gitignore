@@ -1,4 +1,4 @@
-/vendor
-/tests
 /.idea
+/tests
+vendor
 /coraza

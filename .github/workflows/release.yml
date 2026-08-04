@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  goreleaser:
+  php-fpm-release:
     runs-on: ubuntu-latest
     steps:
       # 第一步：檢出你的代碼
