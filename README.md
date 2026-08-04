@@ -99,3 +99,24 @@ pm.max_spare_servers = 5
 docker compose down
 docker compose up -d
 ```
+
+### 配置優先級說明
+
+PHP 在 `/usr/local/etc/php/conf.d/` 目錄中按**檔名字母順序**載入所有 `.ini` 檔案，後面載入的會覆蓋前面的相同指令。
+
+容器內相關檔案：
+
+| 檔案 | 用途 |
+|-|-|
+|`docker-php-ext-opcache.ini`|載入 opcache 擴展（`zend_extension=opcache`）|
+|`opcache.ini`|opcache 運行時配置（JIT、buffer 等）|
+
+如果用 Docker volume 掛載自訂配置，建議使用排序靠後的檔名以確保優先級：
+
+```yaml
+volumes:
+  # 使用 99- 前綴確保最後載入
+  - ./config/opcache.ini:/usr/local/etc/php/conf.d/99-opcache.ini:ro
+```
+
+這樣可以避免被其他 `.ini` 檔案覆蓋。
