@@ -1,4 +1,4 @@
 /.idea
-/coraza
-tests
+/tests
 vendor
+/coraza

@@ -1,11 +1,12 @@
-version: "3"
-
+version: '3.8'
 services:
-  build-img:
-    image: "mmhk/php-docker:8.2-fpm"
+  php-docker:
     build:
       context: .
       dockerfile: Dockerfile
       platforms:
         - "linux/amd64"
         - "linux/arm64"
+      tags:
+        - mmhk/php-docker:8.2-fpm
+    image: mmhk/php-docker:8.2-fpm
