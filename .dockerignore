@@ -1,0 +1,10 @@
+vendor
+tests
+coraza
+README.md
+LICENSE
+.gitignore
+.git
+.idea
+.dockerignore
+docker-compose.yml
