@@ -7,8 +7,19 @@ ENV WWW_UID=1000
 ENV WWW_GID=1000
 
 # base layer
+# PECL/GitHub 拉取原始碼可能因網路不穩而失敗，install-php-extensions 本身無重試機制，
+# 因此這裡在 shell 層面最多重試 5 次，每次失敗間隔 10 秒；5 次皆失敗則中止 build。
 RUN apt-get update && apt-get install -y tzdata \
- && install-php-extensions @composer gd gmp memcached gettext imagick mcrypt mysqli redis pdo_mysql pdo_pgsql pgsql zstd opcache exif bcmath soap sockets timezonedb zip snmp bz2 shmop ffi \
+ && attempt=1 \
+ && until install-php-extensions @composer gd gmp memcached gettext imagick mcrypt mysqli redis pdo_mysql pdo_pgsql pgsql zstd opcache exif bcmath soap sockets timezonedb zip snmp bz2 shmop ffi; do \
+      attempt=$((attempt + 1)); \
+      if [ "$attempt" -gt 5 ]; then \
+        echo "install-php-extensions failed after 5 attempts" >&2; \
+        exit 1; \
+      fi; \
+      echo "install-php-extensions failed, retrying in 10s (attempt $attempt/5)"; \
+      sleep 10; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 
 # config layer

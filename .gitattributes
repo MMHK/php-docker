@@ -1,0 +1,4 @@
+# Force LF line endings for shell scripts.
+# entrypoint.sh runs inside a Linux container (php:8.0-fpm-bullseye);
+# CRLF would break the shebang with "bad interpreter: /bin/sh^M".
+*.sh text eol=lf
