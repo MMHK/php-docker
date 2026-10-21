@@ -1,3 +1,6 @@
 # Force LF for shell scripts to prevent CRLF issues in Docker
 *.sh text eol=lf
 entrypoint.sh text eol=lf
+# Patch files are applied with `patch -p1` in the Dockerfile; CRLF would break
+# every hunk's context and make the build fail.
+*.patch text eol=lf

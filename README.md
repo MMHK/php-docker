@@ -11,7 +11,20 @@
 |OPCACHE_JIT|对应php.ini `opcache.jit`|tracing|
 |OPCACHE_JIT_BUFFER|对应php.ini `opcache.jit_buffer_size`|128M|
 
-### 已安装扩展
+### 來源與安全修補
+
+本鏡像**從原始碼編譯** PHP 7.4.33（基底 `debian:bullseye-slim`），並套用官方
+backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
+
+- 補丁：`patches/php-7.4-CVE-2026-109618-109619.patch`（來源 php-src 分支
+  `PHP-7.4-CVE-2026-109618-109619`，commit `712e60f9`），可直接在 repo 內審閱。
+- 原始碼 tarball 與補丁均以 SHA256 固定，建置時驗證。
+- 映像內含證明檔 `/usr/local/etc/php/cve-2026-109618-109619.patched`。
+
+> PHP 7.4 已於 2022-11 EOL，官方不再提供 7.4 修復版，因此以源碼 backport 方式修補。
+> 設計與驗證細節見 `docs/plans/php-7.4-cve-2026-109618-109619-patch.md`。
+
+### 已安裝擴展
 
 |||
 |-|-|
@@ -33,10 +46,12 @@
 |zip||
 |snmp||
 |bz2||
+|shmop||
+|ffi||
 
 
 ### RUN
 
 ```
-docker run -d --name php-fpm -p 9000:9000 -v /var/www/html:/var/www/html mmhk/php-docker:8-fpm
+docker run -d --name php-fpm -p 9000:9000 -v /var/www/html:/var/www/html mmhk/php-docker:7.4-fpm
 ```
