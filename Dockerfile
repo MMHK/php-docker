@@ -7,8 +7,11 @@ ENV WWW_UID=1000
 ENV WWW_GID=1000
 
 # base layer
+# pecl.php.net 偶发 HTTP 500（下载失败），这里加重试循环（最多 5 次，间隔 15s）
 RUN apt-get update && apt-get install -y tzdata \
- && install-php-extensions @composer gd gmp memcached gettext imagick mcrypt mysqli redis pdo_mysql pdo_pgsql pgsql zstd opcache exif bcmath soap sockets timezonedb zip snmp bz2 shmop ffi \
+ && { i=0; until install-php-extensions @composer gd gmp memcached gettext imagick mcrypt mysqli redis pdo_mysql pdo_pgsql pgsql zstd opcache exif bcmath soap sockets timezonedb zip snmp bz2 shmop ffi; do \
+      i=$((i+1)); [ $i -ge 5 ] && exit 1; echo "install attempt $i failed, retrying in 15s"; sleep 15; \
+    done; } \
  && rm -rf /var/lib/apt/lists/*
 
 RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/php_admin_value[error_log]=\/proc\/self\/fd\/2/g" /usr/local/etc/php-fpm.d/*.conf \
@@ -25,7 +28,9 @@ RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/p
 COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
 COPY opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# 防止 Windows 环境下 entrypoint.sh 出现 CRLF 导致 "exec format error"
+RUN chmod +x /entrypoint.sh \
+ && sed -i 's/\r$//' /entrypoint.sh
 
 EXPOSE 9000
 
