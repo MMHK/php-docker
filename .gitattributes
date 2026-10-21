@@ -2,3 +2,6 @@
 # entrypoint.sh runs inside a Linux container (php:8.0-fpm-bullseye);
 # CRLF would break the shebang with "bad interpreter: /bin/sh^M".
 *.sh text eol=lf
+# Patch files are applied with `patch -p1` in the Dockerfile; CRLF would break
+# every hunk's context and make the build fail.
+*.patch text eol=lf
