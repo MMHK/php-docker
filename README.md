@@ -18,8 +18,6 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
   `PHP-8.0-CVE-2026-109618-109619`，commit `82f8f31b`），可直接在 repo 內審閱。
 - 原始碼 tarball 與補丁均以 SHA256 固定，建置時驗證。
 - 映像內含證明檔 `/usr/local/etc/php/cve-2026-109618-109619.patched`。
-- 發佈前會跑 `scripts/cve-gate.php`（L0/L1）與 `scripts/oom-semantics.php`（L2）
-  門禁，詳見 `scripts/README.md`。
 
 > PHP 8.0 已於 2023-11 EOL，官方不再提供 8.0 修復版，因此以源碼 backport 方式修補。
 

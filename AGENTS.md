@@ -17,9 +17,7 @@ docker compose up             # run
 ```
 
 Release: push a `v*` tag → GitHub Actions builds multi-arch (amd64/arm64) and
-pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag. A
-`security-gate` job runs `scripts/cve-gate.php` (L0/L1) and
-`scripts/oom-semantics.php` (L2) before publishing.
+pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag.
 
 ## Gotchas
 
@@ -31,9 +29,9 @@ pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag. A
   `patch -p1 --fuzz=0`. The vendored `docker-php-scripts/` (from
   docker-library/php@41c9ad0) are required by `docker-php-source` and
   `install-php-extensions`.
-- **CVE marker is mandatory for release**: the image must carry
+- **CVE marker**: the image carries
   `/usr/local/etc/php/cve-2026-109618-109619.patched` with both CVE IDs, the
-  40-hex commit and the branch declaration; the L0 gate fails closed without it.
+  40-hex commit and the branch declaration.
 - **redis is not installed from the PECL channel**: pecl.php.net answers PEAR's
   REST metadata request with gzip, which PEAR cannot parse. The Dockerfile
   downloads the pinned tarball (`REDIS_VERSION` / `REDIS_SHA256`), extracts it to
