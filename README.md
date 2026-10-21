@@ -9,6 +9,20 @@
 |WWW_UID|www-data(容器自带fpm执行账户)账户的UID|1000|
 |WWW_GID|www-data(容器自带fpm执行账户)账户的GID|1000|
 
+### 來源與安全修補
+
+本鏡像**從原始碼編譯** PHP 8.0.30（基底 `debian:bullseye-slim`），並套用官方
+backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
+
+- 補丁：`patches/php-8.0-CVE-2026-109618-109619.patch`（來源 php-src 分支
+  `PHP-8.0-CVE-2026-109618-109619`，commit `82f8f31b`），可直接在 repo 內審閱。
+- 原始碼 tarball 與補丁均以 SHA256 固定，建置時驗證。
+- 映像內含證明檔 `/usr/local/etc/php/cve-2026-109618-109619.patched`。
+- 發佈前會跑 `scripts/cve-gate.php`（L0/L1）與 `scripts/oom-semantics.php`（L2）
+  門禁，詳見 `scripts/README.md`。
+
+> PHP 8.0 已於 2023-11 EOL，官方不再提供 8.0 修復版，因此以源碼 backport 方式修補。
+
 ### 已安装扩展
 
 ||||
