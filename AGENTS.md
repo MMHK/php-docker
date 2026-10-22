@@ -50,9 +50,10 @@ pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag.
 - Extensions installed via
   [mlocati/install-php-extensions](https://github.com/mlocati/docker-php-extension-installer)
   from `scripts/install-extensions.sh`, with 2 attempts (PECL REST failures are
-  permanent, so the retry only covers transient network errors).
-  `docker-php-ext-configure` is not needed — the script handles
-  configure/install/enable internally.
+  permanent, so the retry only covers transient network errors). The installer is
+  pinned to 2.12.3 and verified with `ADD --checksum` — do not go back to
+  `releases/latest`. `docker-php-ext-configure` is not needed — the script
+  handles configure/install/enable internally.
 - Opcache is installed by `install-php-extensions` (compiled from the patched
   source). JIT config lives in `opcache.ini` (COPY to
   `/usr/local/etc/php/conf.d/`), **not** via `php_admin_value` in FPM pool config
