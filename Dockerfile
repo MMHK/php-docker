@@ -14,6 +14,11 @@
 # Integrity: the release tarball is pinned by the official SHA256 (from
 # docker-library/php) and the patch by its own SHA256; GitHub has no GPG .asc
 # for the branch diff, so SHA256 replaces the upstream GPG check.
+#
+# Extensions: bundled ones are compiled from the patched source tree; PECL ones
+# are installed from pinned tarballs by scripts/install-extensions.sh, because
+# pecl.php.net's REST metadata is gzip-encoded and PEAR cannot parse it (see the
+# script header). The installer itself is pinned by version + checksum too.
 
 FROM debian:bullseye-slim
 
@@ -250,7 +255,12 @@ RUN set -eux; \
 
 # ================= repo customisations =================
 
-ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+# Pinned installer (no `releases/latest`): its behaviour changes between
+# releases and decides what actually lands in the image. `--checksum` makes
+# BuildKit verify the download, mirroring the SHA256 pins used elsewhere.
+ADD --chmod=0755 --checksum=sha256:9c26dd516b8147235c4e924c52e2f076fb2b3f278f5457e88918518ebfee9e01 \
+	https://github.com/mlocati/docker-php-extension-installer/releases/download/2.12.3/install-php-extensions \
+	/usr/local/bin/
 
 ENV TZ=Asia/Hong_Kong
 ENV WWW_UID=1000
@@ -265,9 +275,12 @@ ENV WWW_GID=1000
 COPY --chmod=0755 scripts/install-extensions.sh /usr/local/bin/
 
 # base layer
-RUN apt-get update && apt-get install -y tzdata \
- && install-extensions.sh \
- && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+	export DEBIAN_FRONTEND=noninteractive; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends tzdata; \
+	install-extensions.sh; \
+	rm -rf /var/lib/apt/lists/*
 
 # config layer
 RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/php_admin_value[error_log]=\/proc\/self\/fd\/2/g" /usr/local/etc/php-fpm.d/*.conf \
@@ -287,7 +300,7 @@ EXPOSE 9000
 
 COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
 COPY opcache.ini /usr/local/etc/php/conf.d/opcache.ini
-# backport proof for CVE-2026-109618 / CVE-2026-109619 (required by the L0 gate;
+# backport proof for CVE-2026-109618 / CVE-2026-109619 (kept for traceability;
 # 8.0 is EOL so the version number alone cannot prove the fixes are present)
 COPY cve-2026-109618-109619.patched /usr/local/etc/php/cve-2026-109618-109619.patched
 COPY entrypoint.sh /entrypoint.sh
