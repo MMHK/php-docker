@@ -20,6 +20,14 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
   `PHP-7.4-CVE-2026-109618-109619`，commit `712e60f9`），可直接在 repo 內審閱。
 - 原始碼 tarball 與補丁均以 SHA256 固定，建置時驗證。
 - 映像內含證明檔 `/usr/local/etc/php/cve-2026-109618-109619.patched`。
+- `phpinfo()` 頁面上有兩個標識可確認已修補：
+  - `Additional .ini files parsed` 會列出
+    `/usr/local/etc/php/conf.d/zz-cve-2026-109618-109619.ini`
+  - `Environment` 區（及 `$_SERVER` / `$_ENV`）有
+    `PHP_CVE_PATCHES=CVE-2026-109618,CVE-2026-109619`
+
+> 版本號仍是 `7.4.33`：那是官方最後一版，`7.4.33` 本身無法區分是否已補丁，
+> 因此不用改版本字串來當標識。
 
 > PHP 7.4 已於 2022-11 EOL，官方不再提供 7.4 修復版，因此以源碼 backport 方式修補。
 > 設計與驗證細節見 `docs/plans/php-7.4-cve-2026-109618-109619-patch.md`。

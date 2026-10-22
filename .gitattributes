@@ -4,3 +4,5 @@ entrypoint.sh text eol=lf
 # Patch files are applied with `patch -p1` in the Dockerfile; CRLF would break
 # every hunk's context and make the build fail.
 *.patch text eol=lf
+# conf.d markers / ini snippets are copied verbatim into the image
+*.ini text eol=lf

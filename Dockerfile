@@ -265,6 +265,11 @@ ENV TZ=Asia/Hong_Kong
 ENV WWW_UID=1000
 ENV WWW_GID=1000
 
+# Backport marker visible on phpinfo(): `variables_order` is EGPCS in this image,
+# so the Environment section of phpinfo() lists this variable. See also the
+# zz-cve-*.ini copied at the bottom (shows under "Additional .ini files parsed").
+ENV PHP_CVE_PATCHES="CVE-2026-109618,CVE-2026-109619"
+
 # All extensions (bundled + PECL) are installed by scripts/install-extensions.sh.
 # PECL packages are pinned tarballs because pecl.php.net serves PEAR's REST
 # metadata gzip-encoded, which PEAR cannot parse — `pecl install <name>` then
@@ -301,6 +306,8 @@ COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
 # backport proof for CVE-2026-109618 / CVE-2026-109619 (required by the L0 gate;
 # 7.4 is EOL so the version number alone cannot prove the fixes are present)
 COPY cve-2026-109618-109619.patched /usr/local/etc/php/cve-2026-109618-109619.patched
+# same marker, but visible on phpinfo() under "Additional .ini files parsed"
+COPY cve-2026-109618-109619.ini /usr/local/etc/php/conf.d/zz-cve-2026-109618-109619.ini
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 USER www-data:www-data
