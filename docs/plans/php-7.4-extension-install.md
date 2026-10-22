@@ -1,7 +1,7 @@
 # PHP 7.4 擴充安裝方案（PECL 固定 tarball）
 
 > 分支：`7.4-fpm`　｜　目標鏡像：`mmhk/php-docker:7.4-fpm`
-> 狀態：**規劃中（尚未實作）**
+> 狀態：**規劃完成，尚未改 Dockerfile**（版本、SHA256、PECL 安裝流程已實測，見 5.1/6.1）
 > 參考：`php-8.0-extension-install.md`（8.0 分支已完成並驗證）
 > 相關：`docs/plans/php-7.4-cve-2026-109618-109619-patch.md`（CVE 補丁方案）
 
@@ -81,15 +81,27 @@ install-php-extensions failed after 5 attempts
 1. **版本表**（`name version sha256`）：7.4 與 8.0 可用**完全相同**的 tarball，
    因此 SHA256 直接沿用（已逐一驗證）：
 
-   | 擴充 | 版本 | `package.xml` 最低 PHP | 與 8.0 相同 |
+   | 擴充 | 版本 | `package.xml` PHP 範圍 | SHA256（2026-10-22 實測） |
    |---|---|---|---|
-   | memcached | 3.4.0 | 7.0.0 | ✅ |
-   | imagick | 3.8.1 | 5.6.0 | ✅ |
-   | mcrypt | 1.0.9 | 7.2.0 | ✅ |
-   | timezonedb | 2026.5 | 5.4.0 | ✅ |
-   | redis | 6.0.2 | 7.4.0 | ✅ |
+   | memcached | 3.4.0 | 7.0.0 – （無上限） | `c163434eb0da97c8f45c7ad41d979d381f8b81c49402b1b90b063987fb37972e` |
+   | imagick | 3.8.1 | 5.6.0 – （無上限） | `3a3587c0a524c17d0dad9673a160b90cd776e836838474e173b549ed864352ee` |
+   | mcrypt | 1.0.9 | 7.2.0 – 8.6.0 | `2a9ef0817d3bf677f6d7baf8e325629a2758974735d8abad6566384788d424a5` |
+   | timezonedb | 2026.5 | 5.4.0 – （無上限） | `affcad3175b7d2d3dde359ca2737addc8c8c95de355c2c73a2bab69bbbc2e012` |
+   | redis | 6.0.2 | 7.2.0 – （無上限） | `01aeccb0e14f897fe56f0509be6e6991ff0ad459f9d34e95e4556d02699b9a03` |
 
    > 8.0 的 `zstd 0.18.0` 在 7.4 不使用，不列入。
+
+   **已核對（本機，2026-10-22）**
+   - 五個 `https://pecl.php.net/get/<name>-<version>.tgz` 重新下載，SHA256 與上表**逐一相符**，
+     且與 8.0 分支 `scripts/install-extensions.sh` 內的值完全相同（同一份 tarball）。
+   - 五個 tarball 佈局皆為：根目錄 `package.xml` + `<name>-<version>/` 原始碼
+     （`tar -tzf` 逐一確認），符合 5.1 第 3 點的解壓方式。
+   - `package.xml` 的 `<version><release>` 與檔名一致；PHP 範圍見上表。
+   - **修正 8.0 文件的數據**：redis 6.0.2 的 `package.xml` 寫的是 `min 7.2.0`，
+     不是 8.0 文件表格中的 7.4.0（7.4 仍可用，只是下限更低）。
+   - 現有 `mmhk/php-docker:7.4-fpm-verify` 內實際安裝的版本正好是
+     `memcached 3.4.0 / imagick 3.8.1 / mcrypt 1.0.9 / redis 6.0.2 / timezonedb 2026.5`
+     —— 即 PECL channel 當時解析出的就是這五個版本，固定後行為不變，只是不再依賴 channel。
 
 2. 逐一下載 `https://pecl.php.net/get/<name>-<version>.tgz`（`curl --retry 5`）並驗證 SHA256。
 3. 解壓成 **`package.xml` 與原始碼同層**：
@@ -147,8 +159,9 @@ ADD --chmod=0755 --checksum=sha256:9c26dd516b8147235c4e924c52e2f076fb2b3f278f545
 | 項目 | 方法 | 通過標準 |
 |---|---|---|
 | 腳本語法 | `sh -n scripts/install-extensions.sh` | 無錯誤 |
-| 五個 tarball SHA256 | 下載後 `sha256sum -c` | 全部 OK |
-| tarball 佈局 | `tar -tzf` 檢查 `package.xml` 在根、原始碼在 `<name>-<version>/` | 五個皆符合 |
+| 五個 tarball SHA256 | 下載後 `sha256sum -c` | ✅ 已驗證（2026-10-22，5/5 相符） |
+| tarball 佈局 | `tar -tzf` 檢查 `package.xml` 在根、原始碼在 `<name>-<version>/` | ✅ 已驗證（5/5 符合） |
+| 5 個 PECL 在 7.4 實際編譯 + 載入 | 在 `7.4-fpm-verify` 容器內清 registry 後跑 5.1 步驟 2–4 | ✅ 已驗證（見下方） |
 | 完整建置 | `docker build --platform linux/amd64 -t mmhk/php-docker:7.4-fpm-local .` | 成功，無 reject / 無 REST 查詢 |
 | 版本 | `php -r 'foreach (["memcached","imagick","mcrypt","redis","timezonedb"] as $e) echo $e," ",phpversion($e),PHP_EOL;'` | 3.4.0 / 3.8.1 / 1.0.9 / 6.0.2 / 2026.5 |
 | 擴充齊全 | `php -m` | 20 項 + `sodium`、`Zend OPcache` 皆在 |
@@ -161,6 +174,41 @@ ADD --chmod=0755 --checksum=sha256:9c26dd516b8147235c4e924c52e2f076fb2b3f278f545
 `Ignoring installed package … / Nothing to install`，IPE 接著因找不到 `.so` 而失敗。
 全新 build 的 registry 是空的，不會發生；除錯時請先清
 `/usr/local/lib/php/.registry/.channel.pecl.php.net`。
+
+**除錯實測補充**：清 registry 時也要一併刪掉對應的 `conf.d/*<name>*.ini`
+（本 image 的 memcached ini 名為 `xx-php-ext-memcached.ini`，不是 IPE 的
+`docker-php-ext-*.ini`），否則 IPE 會以 `Module '<name>' already loaded` 判定失敗。
+
+### 6.1 已完成的模擬驗證（2026-10-22）
+
+在既有的 `mmhk/php-docker:7.4-fpm-verify`（PHP 7.4.33 + 已套補丁）容器內，以 root
+清掉 5 個 PECL 的 registry/ini/so，再執行 5.1 步驟 2–4（只裝這 5 個，不重編 PHP）：
+
+```
+>>> staging memcached 3.4.0      sha256sum: OK
+>>> staging imagick 3.8.1        sha256sum: OK
+>>> staging mcrypt 1.0.9         sha256sum: OK
+>>> staging timezonedb 2026.5    sha256sum: OK
+>>> staging redis 6.0.2          sha256sum: OK
+
+install ok: channel://pecl.php.net/memcached-3.4.0     ... ok.
+install ok: channel://pecl.php.net/imagick-3.8.1       ... ok.
+install ok: channel://pecl.php.net/mcrypt-1.0.9        ... ok.
+install ok: channel://pecl.php.net/timezonedb-2026.5   ... ok.
+install ok: channel://pecl.php.net/redis-6.0.2         ... ok.
+
+memcached    3.4.0
+imagick      3.8.1
+mcrypt       1.0.9
+redis        6.0.2
+timezonedb   2026.5
+```
+
+- 全程**沒有任何 REST 查詢**（沒有 `does not have REST xml available`），證明目錄路徑
+  確實繞過 channel。
+- imagick 需要的 `libmagickwand-dev`、memcached 需要的 `libmemcached-dev` 等 apt 依賴
+  由 IPE 自行從 `archive.debian.org` 安裝成功（bullseye EOL 設定已就位）。
+- 因此剩下的不確定性只在於完整 build 的其餘 14 個 bundled 擴充（與本次改動無關）。
 
 ## 7. 檔案清單
 
