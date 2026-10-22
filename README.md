@@ -2,6 +2,15 @@
 
 适用于容器化的PHP执行环境
 
+### 基底映像
+
+基底固定為 `php:8.4.27-fpm-bookworm`（不跟隨浮動的 `php:8.4-fpm-bookworm`），
+因為 `8.4.27` 才含 **CVE-2026-109618 / CVE-2026-109619**（critical RCE）的修補。
+
+- 容器內可用 `php -v` 自證版本（必須 ≥ 8.4.27）。
+- 每次 PHP 釋出安全版需手動提升 `Dockerfile` 的 `FROM`，流程見
+  [`docs/plans/php-8.4-cve-2026-109618-109619-patch.md`](docs/plans/php-8.4-cve-2026-109618-109619-patch.md)。
+
 ### Environment
 
 |ENV|remark|default value|

@@ -2,7 +2,9 @@
 
 ## What this is
 
-Single Docker image: PHP 8.4 FPM on `php:8.4-fpm-bookworm`, published as `mmhk/php-docker:8.4-fpm`. No application code, no tests, no lint.
+Single Docker image: PHP 8.4 FPM on `php:8.4.27-fpm-bookworm`, published as `mmhk/php-docker:8.4-fpm`. No application code, no tests, no lint.
+
+The base tag is pinned to an exact patch version on purpose (CVE-2026-109618/109619 fix landed in 8.4.27). Bump it manually on each PHP security release — see `docs/plans/php-8.4-cve-2026-109618-109619-patch.md`.
 
 ## Commands
 

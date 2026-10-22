@@ -1,4 +1,6 @@
-FROM php:8.4-fpm-bookworm
+# 固定上游 patch 版本（含 CVE-2026-109618 / CVE-2026-109619 修補）
+# 見 docs/plans/php-8.4-cve-2026-109618-109619-patch.md
+FROM php:8.4.27-fpm-bookworm
 
 ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 
