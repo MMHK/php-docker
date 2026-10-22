@@ -18,6 +18,8 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
   `PHP-8.0-CVE-2026-109618-109619`，commit `82f8f31b`），可直接在 repo 內審閱。
 - 原始碼 tarball 與補丁均以 SHA256 固定，建置時驗證。
 - 映像內含證明檔 `/usr/local/etc/php/cve-2026-109618-109619.patched`。
+- `phpinfo()` 另可見兩個標識：`Additional .ini files parsed` 內的
+  `zz-cve-2026-109618-109619.ini`，以及環境變數 `PHP_CVE_PATCHES`。
 - 所有建置輸入都固定：PHP tarball、CVE 補丁、PECL 擴充 tarball
   （`scripts/install-extensions.sh`）與 `install-php-extensions` 版本。
 

@@ -265,6 +265,9 @@ ADD --chmod=0755 --checksum=sha256:9c26dd516b8147235c4e924c52e2f076fb2b3f278f545
 ENV TZ=Asia/Hong_Kong
 ENV WWW_UID=1000
 ENV WWW_GID=1000
+# zz-cve-*.ini and the marker file are copied at the bottom; this mirror of the
+# marker is visible in phpinfo() under Environment / $_SERVER / $_ENV.
+ENV PHP_CVE_PATCHES="CVE-2026-109618,CVE-2026-109619"
 
 # All extensions (bundled + PECL) are installed by scripts/install-extensions.sh.
 # PECL packages are pinned tarballs because pecl.php.net serves PEAR's REST
@@ -303,6 +306,8 @@ COPY opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 # backport proof for CVE-2026-109618 / CVE-2026-109619 (kept for traceability;
 # 8.0 is EOL so the version number alone cannot prove the fixes are present)
 COPY cve-2026-109618-109619.patched /usr/local/etc/php/cve-2026-109618-109619.patched
+# same marker, but visible on phpinfo() under "Additional .ini files parsed"
+COPY --chmod=0644 cve-2026-109618-109619.ini /usr/local/etc/php/conf.d/zz-cve-2026-109618-109619.ini
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 USER www-data:www-data

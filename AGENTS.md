@@ -31,7 +31,10 @@ pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag.
   `install-php-extensions`.
 - **CVE marker**: the image carries
   `/usr/local/etc/php/cve-2026-109618-109619.patched` with both CVE IDs, the
-  40-hex commit and the branch declaration.
+  40-hex commit and the branch declaration. Two more markers are visible on
+  `phpinfo()`: `conf.d/zz-cve-2026-109618-109619.ini` (comment-only, listed under
+  "Additional .ini files parsed") and the `PHP_CVE_PATCHES` env var
+  (`CVE-2026-109618,CVE-2026-109619`, visible because `variables_order` has `E`).
 - **PECL extensions are not installed by name**: pecl.php.net answers PEAR's
   REST metadata request with a gzip body that PEAR cannot parse, so
   `pecl install <name>` fails with `Package "<name>" Version "<v>" does not have
