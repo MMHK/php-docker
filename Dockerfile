@@ -256,38 +256,17 @@ ENV TZ=Asia/Hong_Kong
 ENV WWW_UID=1000
 ENV WWW_GID=1000
 
-# redis PECL tarball, pinned. 6.0.2 is the last 6.0.x line and supports PHP 8.0.
-# Installed from a pre-extracted directory (see below) instead of the PECL
-# channel because pecl.php.net now answers the PEAR REST metadata request with
-# a gzip body that PEAR does not decompress ("Package redis does not have REST
-# info xml available").
-ENV REDIS_VERSION=6.0.2
-ENV REDIS_URL="https://pecl.php.net/get/redis-6.0.2.tgz"
-ENV REDIS_SHA256="01aeccb0e14f897fe56f0509be6e6991ff0ad459f9d34e95e4556d02699b9a03"
+# All extensions (bundled + PECL) are installed by scripts/install-extensions.sh.
+# PECL packages are pinned tarballs because pecl.php.net serves PEAR's REST
+# metadata gzip-encoded, which PEAR cannot parse — `pecl install <name>` then
+# fails with "Package <name> Version <v> does not have REST xml available" for
+# every PECL package, not just redis. See the script header for the details and
+# for how to bump a version.
+COPY --chmod=0755 scripts/install-extensions.sh /usr/local/bin/
 
 # base layer
-# PECL/GitHub 拉取原始碼可能因網路不穩而失敗，install-php-extensions 本身無重試機制，
-# 因此這裡在 shell 層面最多重試 5 次，每次失敗間隔 10 秒；5 次皆失敗則中止 build。
-#
-# redis 不走 PECL 通道：改為自行下載 tarball、解壓成「package.xml 與原始碼同層」，
-# 再以目錄路徑交給 install-php-extensions（它會讀 package.xml 並執行 pecl install）。
 RUN apt-get update && apt-get install -y tzdata \
- && curl --retry 5 --retry-delay 5 -fsSL -o /usr/src/redis.tgz "$REDIS_URL" \
- && echo "$REDIS_SHA256 *redis.tgz" | (cd /usr/src && sha256sum -c -) \
- && mkdir -p /usr/src/redis \
- && tar -xzf /usr/src/redis.tgz -C /usr/src/redis --strip-components=1 "redis-$REDIS_VERSION" \
- && tar -xzf /usr/src/redis.tgz -C /usr/src/redis package.xml \
- && rm -f /usr/src/redis.tgz \
- && attempt=1 \
- && until install-php-extensions @composer gd gmp memcached gettext imagick mcrypt mysqli /usr/src/redis pdo_mysql pdo_pgsql pgsql zstd opcache exif bcmath soap sockets timezonedb zip snmp bz2 shmop ffi; do \
-      attempt=$((attempt + 1)); \
-      if [ "$attempt" -gt 5 ]; then \
-        echo "install-php-extensions failed after 5 attempts" >&2; \
-        exit 1; \
-      fi; \
-      echo "install-php-extensions failed, retrying in 10s (attempt $attempt/5)"; \
-      sleep 10; \
-    done \
+ && install-extensions.sh \
  && rm -rf /var/lib/apt/lists/*
 
 # config layer
