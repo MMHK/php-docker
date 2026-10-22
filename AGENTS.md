@@ -32,11 +32,15 @@ pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag.
 - **CVE marker**: the image carries
   `/usr/local/etc/php/cve-2026-109618-109619.patched` with both CVE IDs, the
   40-hex commit and the branch declaration.
-- **redis is not installed from the PECL channel**: pecl.php.net answers PEAR's
-  REST metadata request with gzip, which PEAR cannot parse. The Dockerfile
-  downloads the pinned tarball (`REDIS_VERSION` / `REDIS_SHA256`), extracts it to
-  `/usr/src/redis` with `package.xml` alongside the sources, and passes that
-  directory to `install-php-extensions`.
+- **PECL extensions are not installed by name**: pecl.php.net answers PEAR's
+  REST metadata request with a gzip body that PEAR cannot parse, so
+  `pecl install <name>` fails with `Package "<name>" Version "<v>" does not have
+  REST xml available` for every PECL package (redis, memcached, imagick, mcrypt,
+  zstd, timezonedb). Retrying cannot help — the request succeeds, the payload is
+  just unreadable. `scripts/install-extensions.sh` downloads each pinned tarball
+  (the `name version sha256` table in that script), verifies the SHA256, unpacks
+  it to `/usr/src/pecl/<name>` with `package.xml` next to the sources, and passes
+  that directory to `install-php-extensions`.
 - The patch is verified to apply to 8.0.30 with zero fuzz and to reproduce the
   upstream branch byte-for-byte; do not hand-edit it.
 - Timezone is hardcoded to `Asia/Hong_Kong` in the Dockerfile.
@@ -44,9 +48,11 @@ pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag.
   recycling).
 - Entrypoint sets `umask 0000` (world-writable files).
 - Extensions installed via
-  [mlocati/install-php-extensions](https://github.com/mlocati/docker-php-extension-installer),
-  wrapped in a 5-attempt retry loop. `docker-php-ext-configure` is not needed —
-  the script handles configure/install/enable internally.
+  [mlocati/install-php-extensions](https://github.com/mlocati/docker-php-extension-installer)
+  from `scripts/install-extensions.sh`, with 2 attempts (PECL REST failures are
+  permanent, so the retry only covers transient network errors).
+  `docker-php-ext-configure` is not needed — the script handles
+  configure/install/enable internally.
 - Opcache is installed by `install-php-extensions` (compiled from the patched
   source). JIT config lives in `opcache.ini` (COPY to
   `/usr/local/etc/php/conf.d/`), **not** via `php_admin_value` in FPM pool config

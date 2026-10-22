@@ -34,6 +34,10 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
 |timezonedb|zip|snmp|
 |bz2|shmop|ffi|
 
+> PECL 擴充（memcached / imagick / mcrypt / redis / zstd / timezonedb）以**固定版本 tarball** 安裝，
+> 版本與 SHA256 見 `scripts/install-extensions.sh`。這是為了繞過 pecl.php.net 的 REST
+> metadata 回傳 gzip 導致 `pecl install <name>` 失敗的問題。
+
 ### OPcache / JIT
 
 通过独立的 `opcache.ini` 配置，已启用 JIT tracing 模式：
