@@ -49,6 +49,10 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
 |shmop||
 |ffi||
 
+PECL 擴充（`memcached` `imagick` `mcrypt` `redis` `timezonedb`）以固定版本 + SHA256 的
+tarball 安裝（不走 PECL channel），`install-php-extensions` 亦固定為 2.12.3；
+原因與升版方式見 `docs/plans/php-7.4-extension-install.md`。
+
 
 ### RUN
 

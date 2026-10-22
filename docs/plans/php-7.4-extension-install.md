@@ -1,7 +1,7 @@
 # PHP 7.4 擴充安裝方案（PECL 固定 tarball）
 
 > 分支：`7.4-fpm`　｜　目標鏡像：`mmhk/php-docker:7.4-fpm`
-> 狀態：**規劃完成，尚未改 Dockerfile**（版本、SHA256、PECL 安裝流程已實測，見 5.1/6.1）
+> 狀態：**已實作並完成本機 amd64 驗證**（見 6.1 / 6.2）；arm64 待 CI
 > 參考：`php-8.0-extension-install.md`（8.0 分支已完成並驗證）
 > 相關：`docs/plans/php-7.4-cve-2026-109618-109619-patch.md`（CVE 補丁方案）
 
@@ -158,17 +158,18 @@ ADD --chmod=0755 --checksum=sha256:9c26dd516b8147235c4e924c52e2f076fb2b3f278f545
 
 | 項目 | 方法 | 通過標準 |
 |---|---|---|
-| 腳本語法 | `sh -n scripts/install-extensions.sh` | 無錯誤 |
+| 腳本語法 | `sh -n scripts/install-extensions.sh` | ✅ 通過（建置時實際執行） |
 | 五個 tarball SHA256 | 下載後 `sha256sum -c` | ✅ 已驗證（2026-10-22，5/5 相符） |
 | tarball 佈局 | `tar -tzf` 檢查 `package.xml` 在根、原始碼在 `<name>-<version>/` | ✅ 已驗證（5/5 符合） |
-| 5 個 PECL 在 7.4 實際編譯 + 載入 | 在 `7.4-fpm-verify` 容器內清 registry 後跑 5.1 步驟 2–4 | ✅ 已驗證（見下方） |
-| 完整建置 | `docker build --platform linux/amd64 -t mmhk/php-docker:7.4-fpm-local .` | 成功，無 reject / 無 REST 查詢 |
-| 版本 | `php -r 'foreach (["memcached","imagick","mcrypt","redis","timezonedb"] as $e) echo $e," ",phpversion($e),PHP_EOL;'` | 3.4.0 / 3.8.1 / 1.0.9 / 6.0.2 / 2026.5 |
-| 擴充齊全 | `php -m` | 20 項 + `sodium`、`Zend OPcache` 皆在 |
-| 功能冒煙 | `Memcached` / `Imagick` / `Redis` 類別可建立 | 無 fatal |
-| 暫存清理 | `ls /usr/src` | 只剩 `php.tar.xz` |
-| 補丁仍在 | `nm -D /usr/local/bin/php` | `zend_mm_safe_error_ex`、`zend_new_array_singleton` |
-| arm64 | GitHub Actions 原生 runner | 建置成功並推送 |
+| 5 個 PECL 在 7.4 實際編譯 + 載入 | 在 `7.4-fpm-verify` 容器內清 registry 後跑 5.1 步驟 2–4 | ✅ 已驗證（見 6.1） |
+| 完整建置 | `docker build --platform linux/amd64 .` | ✅ 通過（擴充層 216s，映像 797MB，全程無 REST 查詢） |
+| PECL 版本 | `phpversion()` 逐項 | ✅ 3.4.0 / 3.8.1 / 1.0.9 / 6.0.2 / 2026.5 |
+| 擴充齊全 | `php -m` | ✅ 19 項 + `sodium` + `Zend OPcache`，無缺 |
+| 功能冒煙 | `Memcached` / `Imagick` / `Redis` 類別 | ✅ 皆可載入 |
+| 暫存清理 | `ls /usr/src` | ✅ 只剩 `php.tar.xz`（無 `pecl/`） |
+| 補丁仍在 | `nm -D /usr/local/bin/php` | ✅ `zend_mm_safe_error_ex`、`zend_new_array_singleton` |
+| 預設執行身分 | `id` | ✅ `uid=1000(www-data)` |
+| arm64 | GitHub Actions 原生 runner | ⏳ 待 `v*` tag 觸發 |
 
 **注意（重裝情境的假警報）**：若 registry 內仍有紀錄，PEAR 會回
 `Ignoring installed package … / Nothing to install`，IPE 接著因找不到 `.so` 而失敗。
@@ -209,6 +210,37 @@ timezonedb   2026.5
 - imagick 需要的 `libmagickwand-dev`、memcached 需要的 `libmemcached-dev` 等 apt 依賴
   由 IPE 自行從 `archive.debian.org` 安裝成功（bullseye EOL 設定已就位）。
 - 因此剩下的不確定性只在於完整 build 的其餘 14 個 bundled 擴充（與本次改動無關）。
+
+### 6.2 完整建置驗證（2026-10-22，amd64）
+
+`docker build --platform linux/amd64 -t mmhk/php-docker:7.4-ext-test .`
+
+```
+#24 [18/23] RUN set -eux; ... install-extensions.sh; ...
+#24 120.3 install ok: channel://pecl.php.net/memcached-3.4.0
+#24 131.1 install ok: channel://pecl.php.net/imagick-3.8.1
+#24 135.1 install ok: channel://pecl.php.net/mcrypt-1.0.9
+#24 150.3 install ok: channel://pecl.php.net/redis-6.0.2
+#24 183.9 install ok: channel://pecl.php.net/timezonedb-2026.5
+#24 DONE 216.4s
+#30 naming to docker.io/mmhk/php-docker:7.4-ext-test done
+```
+
+容器內檢查：
+
+| 項目 | 結果 |
+|---|---|
+| `PHP_VERSION` | `7.4.33` |
+| PECL 版本 | `memcached 3.4.0` / `imagick 3.8.1` / `mcrypt 1.0.9` / `redis 6.0.2` / `timezonedb 2026.5` |
+| bundled 缺漏 | 無（gd/gettext/mysqli/pdo_mysql/opcache/exif/bcmath/soap/sockets/zip/snmp/bz2/shmop/FFI + sodium 全在） |
+| 類別載入 | `Memcached` / `Imagick` / `Redis` 皆 `yes` |
+| `/usr/src` | 只剩 `php.tar.xz`（10,420,144 bytes），無 `pecl/` |
+| 補丁符號 | `zend_mm_safe_error_ex`、`zend_new_array_singleton` 存在 |
+| 預設使用者 | `uid=1000(www-data) gid=1000(www-data)` |
+| 映像大小 | 797MB（舊版 799MB） |
+
+建置日誌中**沒有任何** `does not have REST xml available`，且 `install-php-extensions` 的
+重試機制一次都沒被觸發。
 
 ## 7. 檔案清單
 
