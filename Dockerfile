@@ -285,6 +285,17 @@ RUN set -eux; \
 	install-extensions.sh; \
 	rm -rf /var/lib/apt/lists/*
 
+# CA bundle layer
+# Debian bullseye 已 EOL，apt 的 ca-certificates 停在 eMudhra 事件前版本；
+# 以 curl 官方固定日期 bundle 取代，供 PHP runtime 使用（不改系統 bundle）。
+RUN set -eux; \
+	curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
+		-o /usr/local/share/ca-certificates/cacert-2026-11-05.pem \
+		https://curl.se/ca/cacert-2026-11-05.pem; \
+	echo "427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285 */usr/local/share/ca-certificates/cacert-2026-11-05.pem" \
+		| sha256sum -c -; \
+	chmod 0644 /usr/local/share/ca-certificates/cacert-2026-11-05.pem
+
 # config layer
 RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/php_admin_value[error_log]=\/proc\/self\/fd\/2/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;chdir =/chdir =/g" /usr/local/etc/php-fpm.d/*.conf \
@@ -303,6 +314,7 @@ EXPOSE 9000
 
 COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
 COPY opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY ca-bundle.ini /usr/local/etc/php/conf.d/ca-bundle.ini
 # backport proof for CVE-2026-109618 / CVE-2026-109619 (kept for traceability;
 # 8.0 is EOL so the version number alone cannot prove the fixes are present)
 COPY cve-2026-109618-109619.patched /usr/local/etc/php/cve-2026-109618-109619.patched
