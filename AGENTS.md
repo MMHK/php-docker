@@ -18,6 +18,10 @@ docker compose up             # run
 
 Release: push a `v*` tag → GitHub Actions builds multi-arch (amd64/arm64) and
 pushes to Docker Hub. The image tag is always `8.0-fpm` regardless of git tag.
+Each architecture is built **natively** (amd64 on `ubuntu-latest`, arm64 on
+`ubuntu-24.04-arm`) — no QEMU emulation — then pushed by digest and merged into
+a single manifest list by a follow-up `merge` job, so the tag is never updated
+with a single-arch image.
 
 ## Gotchas
 

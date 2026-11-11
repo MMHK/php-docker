@@ -14,32 +14,116 @@ on:
 permissions:
   contents: write
 
+# 同一時間只跑一份發佈流程，避免兩個 tag 互相覆蓋 manifest
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  php-fpm-release:
-    runs-on: ubuntu-latest
+  # ------------------------------------------------------------------
+  # 每個架構在自己的原生機器上建置，不使用 QEMU 模擬。
+  # amd64 走 ubuntu-latest（x86_64），arm64 走 ubuntu-24.04-arm（原生 arm64）。
+  # 兩個 job 只以 digest 推送，最後由 merge job 合成 multi-arch manifest，
+  # 這樣 push 完成前不會出現「只有單一平台」的半成品 tag。
+  # ------------------------------------------------------------------
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
-      # 第一步：檢出你的代碼
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 第二步：登錄 Docker Hub
+      # Docker Hub 登入；push-by-digest 需要在 build job 內先登入
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 第三步：設置 Docker Buildx
-      - name: Set up Docker Buildx  # 支援多平台建置
+      # 建置器：原生單平台建置，不需要 setup-qemu-action
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 第四步：建置並推送 Docker 鏡像
-      - name: Build and push
+      # 只建置目前架構，並以 digest 推送（尚未產生最終 tag）
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
-          context: .  # 建置上下文（包含Dockerfile的目錄）
-          push: true  # 推送至Docker Hub
-          platforms: linux/amd64,linux/arm64  # 只構建 amd64 和 arm64 架構
-          tags: ${{ secrets.DOCKERHUB_TEAM }}/php-docker:8.0-fpm
-          cache-from: type=gha  # 使用GitHub Actions快取加速建置
-          cache-to: type=gha,mode=max
+          context: .
+          platforms: ${{ matrix.platform }}
+          outputs: >-
+            type=image,name=${{ secrets.DOCKERHUB_TEAM }}/php-docker,push-by-digest=true,name-canonical=true,push=true
+          # 每個架構獨立的 cache scope，避免兩種架構搶同一份快取
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+
+      # 把 digest 交給 merge job（artifact 是矩陣 job 之間傳遞 digest 的標準做法）
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ------------------------------------------------------------------
+  # 把 amd64 + arm64 的 digest 合成單一 multi-arch manifest。
+  # 只有全部架構都建置成功才會執行，失敗時 Docker Hub 上的舊 tag 不會被動到。
+  # ------------------------------------------------------------------
+  merge:
+    name: Merge multi-arch manifest
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 以 digest 為輸入建立 manifest list；tag 維持固定為 8.0-fpm
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # 用陣列收集 digest，避免 shellcheck SC2046 的 word splitting 警告
+          sources=()
+          for digest in *; do
+            sources+=("${{ secrets.DOCKERHUB_TEAM }}/php-docker@sha256:${digest}")
+          done
+          docker buildx imagetools create \
+            --tag "${{ secrets.DOCKERHUB_TEAM }}/php-docker:8.0-fpm" \
+            "${sources[@]}"
+
+      # 驗證產出的 tag 真的同時包含兩個平台
+      - name: Inspect multi-arch image
+        run: |
+          docker buildx imagetools inspect \
+            "${{ secrets.DOCKERHUB_TEAM }}/php-docker:8.0-fpm"
