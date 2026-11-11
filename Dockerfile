@@ -286,6 +286,14 @@ RUN set -eux; \
 	install-extensions.sh; \
 	rm -rf /var/lib/apt/lists/*
 
+# CA bundle layer
+# Download latest Mozilla CA bundle from curl.se to mitigate eMudhra CA compromise (Oct 2026).
+# Debian Bullseye is EOL and cannot receive ca-certificates updates via apt.
+# The bundle is baked into the image at build time — no runtime network dependency.
+RUN mkdir -p /usr/local/share/ca-certificates \
+ && curl -fsSL https://curl.se/ca/cacert.pem -o /usr/local/share/ca-certificates/cacert.pem \
+ && chmod 644 /usr/local/share/ca-certificates/cacert.pem
+
 # config layer
 RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/php_admin_value[error_log]=\/proc\/self\/fd\/2/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;chdir =/chdir =/g" /usr/local/etc/php-fpm.d/*.conf \
@@ -300,9 +308,11 @@ RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/p
  && groupmod -g $WWW_GID www-data
 
 STOPSIGNAL SIGQUIT
+
 EXPOSE 9000
 
 COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
+COPY ca-bundle.ini /usr/local/etc/php/conf.d/ca-bundle.ini
 # backport proof for CVE-2026-109618 / CVE-2026-109619 (required by the L0 gate;
 # 7.4 is EOL so the version number alone cannot prove the fixes are present)
 COPY cve-2026-109618-109619.patched /usr/local/etc/php/cve-2026-109618-109619.patched
