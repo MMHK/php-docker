@@ -2,7 +2,9 @@
 
 > 分支：`8.0-fpm`　｜　目標鏡像：`mmhk/php-docker:8.0-fpm`
 > 狀態：已依方案 B 實作，建置與 6.1／6.2 初步驗證通過（尚未人工 review 確認，6.3 未執行）
-> 相關：`docs/plans/php-8.0-cve-2026-109618-109619-patch.md`、`docs/plans/php-8.0-extension-install.md`
+> 相關：`docs/plans/php-8.0-cve-2026-109618-109619-patch.md`、
+> `docs/archive/php-8.0-extension-install.md`（歷史）、
+> `docs/plans/php-8.0-static-extensions.md`（現行擴充編譯方式）
 > 同源修正（已實作）：`7.4-fpm` 分支 commit `9c67274`
 
 ---
@@ -52,10 +54,11 @@
 **為何選 B**
 
 1. 本分支所有外部輸入都已 pin：`PHP_SHA256`、`PHP_CVE_PATCH_SHA256`、
-   `install-php-extensions` 的 `ADD --checksum`、PECL 的 `name version sha256` 表。
-   動態 bundle 會是唯一的例外。
+   PECL 的 `name version sha256` 表（`scripts/build-php-static.sh`）、
+   以及 Composer phar 的 `ADD --checksum`。動態 bundle 會是唯一的例外。
 2. 固定日期檔可讓「目前信任哪一版 Mozilla bundle」在檔名與 Dockerfile 一目了然。
-3. 與 `7.4-fpm` 的原始規劃（`docs/plans/2026-11-09-emudhra-ca-bundle-fix.md`）一致；
+3. 與 `7.4-fpm` 分支的原始規劃（該分支的
+   `docs/plans/2026-11-09-emudhra-ca-bundle-fix.md`）一致；
    7.4 目前落地的動態版本可在後續對齊。
 
 ---
@@ -77,7 +80,7 @@
 
 ### 5.1 Dockerfile
 
-在 base layer（`install-extensions.sh`）之後、config layer 之前新增：
+在 runtime stage 的 apt 安裝與 `/usr/local` COPY 之後、config layer 之前新增：
 
 ```dockerfile
 # CA bundle layer

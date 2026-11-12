@@ -1,7 +1,18 @@
-# Force LF line endings for shell scripts.
+# Force LF line endings for files that run or are parsed inside the container.
 # entrypoint.sh runs inside a Linux container (php:8.0-fpm-bullseye);
 # CRLF would break the shebang with "bad interpreter: /bin/sh^M".
 *.sh text eol=lf
+entrypoint.sh text eol=lf
 # Patch files are applied with `patch -p1` in the Dockerfile; CRLF would break
 # every hunk's context and make the build fail.
 *.patch text eol=lf
+# conf.d markers / ini snippets are copied verbatim into the image
+*.ini text eol=lf
+# markdown docs are reviewed in diffs; keep them LF on Windows too
+*.md text eol=lf
+# scripts/static-extensions.conf is TAB-separated and parsed in the container;
+# a CRLF checkout would put \r into every configure flag.
+*.conf text eol=lf
+# Vendored docker-php-* helpers have no extension but are executed as shell.
+docker-php-scripts/* text eol=lf
+scripts/* text eol=lf

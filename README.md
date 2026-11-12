@@ -2,6 +2,31 @@
 
 适用于容器化的PHP执行环境
 
+### 專案結構
+
+```
+.
+├── Dockerfile                  # base / builder / runtime 三階段
+├── scripts/                    # builder 用：PHP 與擴充建置（見 scripts/README.md）
+│   ├── build-php-static.sh
+│   └── static-extensions.conf
+├── docker-php-scripts/         # builder 用的 docker-php-* 輔助命令
+├── patches/                    # CVE backport 補丁
+├── docs/                       # 設計 / 驗證文件（見 docs/README.md）
+│   ├── plans/                  # 現行方案
+│   └── archive/                # 已廢止方案
+├── tests/                      # CA bundle 驗證腳本（不進映像）
+└── .github/workflows/          # multi-arch 發佈流程
+```
+
+| 想了解 | 看哪裡 |
+|-|-|
+| 怎麼用這個映像 | 本文件下方章節 |
+| 擴充怎麼編進 PHP | `docs/plans/php-8.0-static-extensions.md` |
+| 建置腳本與新增/升級擴充 | `scripts/README.md` |
+| 文件索引 | `docs/README.md` |
+| 維護者注意事項 / gotchas | `AGENTS.md` |
+
 ### Environment
 
 |ENV|remark|default value|
@@ -21,9 +46,30 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
 - `phpinfo()` 另可見兩個標識：`Additional .ini files parsed` 內的
   `zz-cve-2026-109618-109619.ini`，以及環境變數 `PHP_CVE_PATCHES`。
 - 所有建置輸入都固定：PHP tarball、CVE 補丁、PECL 擴充 tarball
-  （`scripts/install-extensions.sh`）與 `install-php-extensions` 版本。
+  （`scripts/build-php-static.sh`）與 Composer 版本（2.11.2 phar + checksum）。
 
 > PHP 8.0 已於 2023-11 EOL，官方不再提供 8.0 修復版，因此以源碼 backport 方式修補。
+
+### 擴充編譯方式（靜態內嵌）
+
+除 OPcache（PHP 8.0 強制 shared）與 sodium（與官方一致維持 shared）外，
+所有擴充都在建置時**直接編進 `php` / `php-fpm` binary**，執行期不再有對應的
+`.so` 與 `extension=` ini。映像因此採三階段建置：
+
+| Stage | 內容 |
+|-|-|
+| `base` | bullseye archive 來源設定、`no-debian-php` pin |
+| `builder` | PHP 原始碼 + CVE 補丁 + 編譯器 + 22 個靜態擴充（不進最終映像） |
+| `runtime` | 只複製 `/usr/local` 的執行期檔案與必要的 runtime library |
+
+需要另外編譯擴充時，請使用 builder stage：
+
+```bash
+docker build --target builder -t mmhk/php-docker:8.0-fpm-builder .
+docker run --rm -it --user root mmhk/php-docker:8.0-fpm-builder sh
+# 容器內：
+docker-php-ext-static-install calendar   # 需要先安裝該擴充的系統依賴
+```
 
 ### 已安装扩展
 
@@ -38,9 +84,10 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
 |timezonedb|zip|snmp|
 |bz2|shmop|ffi|
 
-> PECL 擴充（memcached / imagick / mcrypt / redis / zstd / timezonedb）以**固定版本 tarball** 安裝，
-> 版本與 SHA256 見 `scripts/install-extensions.sh`。這是為了繞過 pecl.php.net 的 REST
-> metadata 回傳 gzip 導致 `pecl install <name>` 失敗的問題。
+> 除 OPcache 與 sodium 仍為 `.so` 外，其餘擴充都靜態編進 binary。
+> PECL 擴充（memcached / imagick / mcrypt / redis / zstd / timezonedb）以**固定版本 tarball**
+> 在 `scripts/build-php-static.sh` 內下載、驗證 SHA256 後解到 `ext/` 一起編譯。這是為了繞過
+> pecl.php.net 的 REST metadata 回傳 gzip 導致 `pecl install <name>` 失敗的問題。
 
 ### OPcache / JIT
 

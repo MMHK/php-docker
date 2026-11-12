@@ -1,4 +1,10 @@
+# syntax=docker/dockerfile:1
 # Patched PHP 8.0 FPM image — CVE-2026-109618 / CVE-2026-109619
+#
+# Multi-stage:
+#   base    : bullseye archive sources + no-debian-php pin, shared by both stages
+#   builder : PHP 8.0.30 source + CVE backport + extensions statically linked
+#   runtime : only runtime files and libraries; no compiler, no PHP source
 #
 # Strategy: build the official PHP 8.0.30 release source (the exact tree used by
 # php:8.0-fpm-bullseye) and apply the official backport patch from php-src branch
@@ -12,15 +18,17 @@
 # runtime behaviour identical to php:8.0-fpm-bullseye.
 #
 # Integrity: the release tarball is pinned by the official SHA256 (from
-# docker-library/php) and the patch by its own SHA256; GitHub has no GPG .asc
-# for the branch diff, so SHA256 replaces the upstream GPG check.
+# docker-library/php), the patch by its own SHA256, and every PECL tarball by
+# SHA256 (see scripts/build-php-static.sh). GitHub has no GPG .asc for the
+# branch diff, so SHA256 replaces the upstream GPG check.
 #
-# Extensions: bundled ones are compiled from the patched source tree; PECL ones
-# are installed from pinned tarballs by scripts/install-extensions.sh, because
-# pecl.php.net's REST metadata is gzip-encoded and PEAR cannot parse it (see the
-# script header). The installer itself is pinned by version + checksum too.
+# Extensions: bundled and PECL extensions are compiled ONCE, statically into the
+# php / php-fpm binaries (scripts/build-php-static.sh). Only OPcache is forced
+# shared by PHP 8.0 itself, and sodium stays shared to match the official image.
+# The builder stage is not shipped; use `--target builder` when you need
+# docker-php-ext-static-install.
 
-FROM debian:bullseye-slim
+FROM debian:bullseye-slim AS base
 
 # Debian bullseye is EOL: point apt at the frozen archive mirrors, otherwise
 # deb.debian.org/debian-security returns 404 for bullseye packages (2026+).
@@ -43,7 +51,21 @@ RUN set -eux; \
 		echo 'Pin-Priority: -1'; \
 	} > /etc/apt/preferences.d/no-debian-php
 
-# dependencies required for running "phpize" (kept at runtime, same as official)
+ENV PHP_INI_DIR /usr/local/etc/php
+RUN set -eux; \
+	mkdir -p "$PHP_INI_DIR/conf.d"; \
+# allow running as an arbitrary user (https://github.com/docker-library/php/issues/743)
+	[ ! -d /var/www/html ]; \
+	mkdir -p /var/www/html; \
+	chown www-data:www-data /var/www/html; \
+	chmod 1777 /var/www/html
+
+# =============================================================================
+# builder: PHP source + CVE patch + static extensions
+# =============================================================================
+FROM base AS builder
+
+# deps required for phpize / compiling extensions (build stage only)
 ENV PHPIZE_DEPS \
 		autoconf \
 		dpkg-dev \
@@ -55,64 +77,41 @@ ENV PHPIZE_DEPS \
 		pkg-config \
 		re2c
 
-# persistent / runtime deps
+# hardening flags (identical to the official image)
+ENV PHP_CFLAGS="-fstack-protector-strong -fpic -fpie -O2 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
+ENV PHP_CPPFLAGS="$PHP_CFLAGS"
+ENV PHP_LDFLAGS="-Wl,-O1 -pie"
+
+ENV PHP_VERSION 8.0.30
+ENV PHP_URL="https://www.php.net/distributions/php-8.0.30.tar.xz"
+ENV PHP_SHA256="216ab305737a5d392107112d618a755dc5df42058226f1670e9db90e77d777d9"
+ENV PHP_CVE_PATCH_SHA256="4cda6e04266d0799c546cd0d79e1161eec82810da62252c164fc19ee00571b54"
+
+# vendored docker-php-* helpers + the static install/clean helpers
+COPY docker-php-scripts/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-php-*
+
+# extension name -> configure flags (shared by the build script and
+# docker-php-ext-static-install)
+COPY scripts/static-extensions.conf /usr/local/share/php-docker/static-extensions.conf
+COPY --chmod=0755 scripts/build-php-static.sh /usr/local/bin/build-php-static.sh
+COPY patches/php-8.0-CVE-2026-109618-109619.patch /usr/src/php-cve.patch
+
+# pinned Composer (same version as the 7.4 branch)
+ADD --chmod=0755 --checksum=sha256:dd158c0afd41d15fac89e1b4e47b5d42911fe316c3687cd5edac98319b25d028 \
+	https://getcomposer.org/download/2.11.2/composer.phar \
+	/usr/local/bin/composer
+
+# build PHP, extensions and their system dependencies in one layer
 RUN set -eux; \
+	export DEBIAN_FRONTEND=noninteractive; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
 		$PHPIZE_DEPS \
 		ca-certificates \
 		curl \
 		xz-utils \
-	; \
-	rm -rf /var/lib/apt/lists/*
-
-ENV PHP_INI_DIR /usr/local/etc/php
-RUN set -eux; \
-	mkdir -p "$PHP_INI_DIR/conf.d"; \
-# allow running as an arbitrary user (https://github.com/docker-library/php/issues/743)
-	[ ! -d /var/www/html ]; \
-	mkdir -p /var/www/html; \
-	chown www-data:www-data /var/www/html; \
-	chmod 1777 /var/www/html
-
-# hardening flags (identical to the official image)
-ENV PHP_CFLAGS="-fstack-protector-strong -fpic -fpie -O2 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
-ENV PHP_CPPFLAGS="$PHP_CFLAGS"
-ENV PHP_LDFLAGS="-Wl,-O1 -pie"
-
-# ---------------------------------------------------------------
-# docker-php-* helper scripts (vendored from docker-library/php@41c9ad0)
-# needed by docker-php-source during the build and by install-php-extensions later
-# ---------------------------------------------------------------
-COPY docker-php-scripts/docker-php-source /usr/local/bin/
-COPY docker-php-scripts/docker-php-ext-configure /usr/local/bin/
-COPY docker-php-scripts/docker-php-ext-install /usr/local/bin/
-COPY docker-php-scripts/docker-php-ext-enable /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-php-*
-
-# ---------------------------------------------------------------
-# official PHP 8.0.30 source + official CVE backport patch
-# ---------------------------------------------------------------
-ENV PHP_VERSION 8.0.30
-ENV PHP_URL="https://www.php.net/distributions/php-8.0.30.tar.xz"
-ENV PHP_SHA256="216ab305737a5d392107112d618a755dc5df42058226f1670e9db90e77d777d9"
-ENV PHP_CVE_PATCH_SHA256="4cda6e04266d0799c546cd0d79e1161eec82810da62252c164fc19ee00571b54"
-
-COPY patches/php-8.0-CVE-2026-109618-109619.patch /usr/src/php-cve.patch
-
-RUN set -eux; \
-	mkdir -p /usr/src; \
-	cd /usr/src; \
-	curl -fsSL -o php.tar.xz "$PHP_URL"; \
-	echo "$PHP_SHA256 *php.tar.xz" | sha256sum -c -; \
-	echo "$PHP_CVE_PATCH_SHA256 *php-cve.patch" | sha256sum -c -
-
-# build & install PHP (official 8.0.30 release + CVE backport patch)
-RUN set -eux; \
-	\
-	savedAptMark="$(apt-mark showmanual)"; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends \
+		patch \
 		libargon2-dev \
 		libcurl4-openssl-dev \
 		libonig-dev \
@@ -121,92 +120,28 @@ RUN set -eux; \
 		libsqlite3-dev \
 		libssl-dev \
 		libxml2-dev \
-		patch \
 		zlib1g-dev \
+		libbz2-dev \
+		libffi-dev \
+		libfreetype6-dev \
+		libjpeg62-turbo-dev \
+		libpng-dev \
+		libwebp-dev \
+		libxpm-dev \
+		libzip-dev \
+		libsnmp-dev \
+		libmcrypt-dev \
+		libmagickwand-dev \
+		libmemcached-dev \
+		libsasl2-dev \
+		liblz4-dev \
+		libzstd-dev \
+		liblzf-dev \
+		libgmp-dev \
+		libpq-dev \
 	; \
-	\
-	export \
-		CFLAGS="$PHP_CFLAGS" \
-		CPPFLAGS="$PHP_CPPFLAGS" \
-		LDFLAGS="$PHP_LDFLAGS" \
-	; \
-	docker-php-source extract; \
-	cd /usr/src/php; \
-# apply the official backport patch (no fuzz: it must match 8.0.30 exactly)
-	patch -p1 --fuzz=0 < /usr/src/php-cve.patch; \
-	rm -f /usr/src/php-cve.patch; \
-	gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"; \
-	debMultiarch="$(dpkg-architecture --query DEB_BUILD_MULTIARCH)"; \
-# https://bugs.php.net/bug.php?id=74125
-	if [ ! -d /usr/include/curl ]; then \
-		ln -sT "/usr/include/$debMultiarch/curl" /usr/local/include/curl; \
-	fi; \
-	./configure \
-		--build="$gnuArch" \
-		--with-config-file-path="$PHP_INI_DIR" \
-		--with-config-file-scan-dir="$PHP_INI_DIR/conf.d" \
-		--enable-option-checking=fatal \
-		--with-mhash \
-		--with-pic \
-		--enable-ftp \
-		--enable-mbstring \
-		--enable-mysqlnd \
-		--with-password-argon2 \
-		--with-sodium=shared \
-		--with-pdo-sqlite=/usr \
-		--with-sqlite3=/usr \
-		--with-curl \
-		--with-iconv \
-		--with-openssl \
-		--with-readline \
-		--with-zlib \
-		--disable-phpdbg \
-		--with-pear \
-# bundled pcre does not support JIT on s390x
-		$(test "$gnuArch" = 's390x-linux-gnu' && echo '--without-pcre-jit') \
-		--with-libdir="lib/$debMultiarch" \
-		--disable-cgi \
-		--enable-fpm \
-		--with-fpm-user=www-data \
-		--with-fpm-group=www-data \
-	; \
-	make -j "$(nproc)"; \
-	find -type f -name '*.a' -delete; \
-	make install; \
-	find \
-		/usr/local \
-		-type f \
-		-perm '/0111' \
-		-exec sh -euxc ' \
-			strip --strip-all "$@" || : \
-		' -- '{}' + \
-	; \
-	make clean; \
-# keep the default example "php.ini" files somewhere easily discoverable
-	cp -v php.ini-* "$PHP_INI_DIR/"; \
-	cd /; \
-	docker-php-source delete; \
-# reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
-	apt-mark auto '.*' > /dev/null; \
-	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
-	find /usr/local -type f -executable -exec ldd '{}' ';' \
-		| awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); print so }' \
-		| sort -u \
-		| xargs -r dpkg-query --search \
-		| cut -d: -f1 \
-		| sort -u \
-		| xargs -r apt-mark manual \
-	; \
-	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
-	rm -rf /var/lib/apt/lists/*; \
-# update pecl channel definitions https://github.com/docker-library/php/issues/443
-	pecl update-channels; \
-	rm -rf /tmp/pear ~/.pearrc; \
-# smoke test
-	php --version
-
-# sodium was built as a shared module, so enable it (same as official image)
-RUN docker-php-ext-enable sodium
+	build-php-static.sh; \
+	rm -rf /var/lib/apt/lists/*
 
 # FPM base config (same as official image)
 RUN set -eux; \
@@ -253,14 +188,10 @@ RUN set -eux; \
 		echo 'fastcgi.logging = Off'; \
 	} > "$PHP_INI_DIR/conf.d/docker-fpm.ini"
 
-# ================= repo customisations =================
-
-# Pinned installer (no `releases/latest`): its behaviour changes between
-# releases and decides what actually lands in the image. `--checksum` makes
-# BuildKit verify the download, mirroring the SHA256 pins used elsewhere.
-ADD --chmod=0755 --checksum=sha256:9c26dd516b8147235c4e924c52e2f076fb2b3f278f5457e88918518ebfee9e01 \
-	https://github.com/mlocati/docker-php-extension-installer/releases/download/2.12.3/install-php-extensions \
-	/usr/local/bin/
+# =============================================================================
+# runtime: no compiler, no PHP source, no PECL staging
+# =============================================================================
+FROM base AS runtime
 
 ENV TZ=Asia/Hong_Kong
 ENV WWW_UID=1000
@@ -269,34 +200,77 @@ ENV WWW_GID=1000
 # marker is visible in phpinfo() under Environment / $_SERVER / $_ENV.
 ENV PHP_CVE_PATCHES="CVE-2026-109618,CVE-2026-109619"
 
-# All extensions (bundled + PECL) are installed by scripts/install-extensions.sh.
-# PECL packages are pinned tarballs because pecl.php.net serves PEAR's REST
-# metadata gzip-encoded, which PEAR cannot parse — `pecl install <name>` then
-# fails with "Package <name> Version <v> does not have REST xml available" for
-# every PECL package, not just redis. See the script header for the details and
-# for how to bump a version.
-COPY --chmod=0755 scripts/install-extensions.sh /usr/local/bin/
-
-# base layer
+# Runtime libraries only. Keep this list in sync with
+# `ldd /usr/local/bin/php /usr/local/sbin/php-fpm` after a build; the CI/dev
+# check is documented in docs/plans/php-8.0-static-extensions.md §10.2.
 RUN set -eux; \
 	export DEBIAN_FRONTEND=noninteractive; \
 	apt-get update; \
-	apt-get install -y --no-install-recommends tzdata; \
-	install-extensions.sh; \
+	apt-get install -y --no-install-recommends \
+		ca-certificates \
+		curl \
+		xz-utils \
+		tzdata \
+		unzip \
+		\
+		libargon2-1 \
+		libreadline8 \
+		libxml2 \
+		libssl1.1 \
+		libsqlite3-0 \
+		zlib1g \
+		libcurl4 \
+		libonig5 \
+		libsodium23 \
+		\
+		libbz2-1.0 \
+		libffi7 \
+		libfreetype6 \
+		libjpeg62-turbo \
+		libpng16-16 \
+		libwebp6 \
+		libwebpmux3 \
+		libwebpdemux2 \
+		libxpm4 \
+		libx11-6 \
+		libxext6 \
+		libxau6 \
+		libxdmcp6 \
+		\
+		libzip4 \
+		libsnmp40 \
+		libsnmp-base \
+		libmcrypt4 \
+		libmemcached11 \
+		libmemcachedutil2 \
+		libsasl2-2 \
+		liblz4-1 \
+		libzstd1 \
+		liblzf1 \
+		libstdc++6 \
+		libgomp1 \
+		\
+		libgmp10 \
+		libpq5 \
+		\
+		libmagickwand-6.q16-6 \
+		libmagickcore-6.q16-6 \
+		libmagickcore-6.q16-6-extra \
+		imagemagick-6-common \
+		ghostscript \
+		fonts-urw-base35 \
+		fontconfig \
+	; \
 	rm -rf /var/lib/apt/lists/*
 
-# CA bundle layer
-# Debian bullseye 已 EOL，apt 的 ca-certificates 停在 eMudhra 事件前版本；
-# 以 curl 官方固定日期 bundle 取代，供 PHP runtime 使用（不改系統 bundle）。
-RUN set -eux; \
-	curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
-		-o /usr/local/share/ca-certificates/cacert-2026-11-05.pem \
-		https://curl.se/ca/cacert-2026-11-05.pem; \
-	echo "427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285 */usr/local/share/ca-certificates/cacert-2026-11-05.pem" \
-		| sha256sum -c -; \
-	chmod 0644 /usr/local/share/ca-certificates/cacert-2026-11-05.pem
+# copy only the runtime payload from the builder
+COPY --from=builder /usr/local/bin/php /usr/local/bin/php
+COPY --from=builder /usr/local/bin/composer /usr/local/bin/composer
+COPY --from=builder /usr/local/sbin/php-fpm /usr/local/sbin/php-fpm
+COPY --from=builder /usr/local/lib/php /usr/local/lib/php
+COPY --from=builder /usr/local/etc /usr/local/etc
 
-# config layer
+# repo FPM tuning
 RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/php_admin_value[error_log]=\/proc\/self\/fd\/2/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;chdir =/chdir =/g" /usr/local/etc/php-fpm.d/*.conf \
  && sed -i -e "s/;rlimit_files = 1024/rlimit_files = 102400/g" /usr/local/etc/php-fpm.d/*.conf \
@@ -310,7 +284,20 @@ RUN sed -i -e "s/;php_admin_value\[error_log\] = \/var\/log\/fpm-php\.www\.log/p
  && groupmod -g $WWW_GID www-data
 
 STOPSIGNAL SIGQUIT
+
 EXPOSE 9000
+
+# CA bundle layer
+# Debian bullseye 已 EOL，apt 的 ca-certificates 停在 eMudhra 事件前版本；
+# 以 curl 官方固定日期 bundle 取代，供 PHP runtime 使用（不改系統 bundle）。
+RUN set -eux; \
+	mkdir -p /usr/local/share/ca-certificates; \
+	curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
+		-o /usr/local/share/ca-certificates/cacert-2026-11-05.pem \
+		https://curl.se/ca/cacert-2026-11-05.pem; \
+	echo "427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285 */usr/local/share/ca-certificates/cacert-2026-11-05.pem" \
+		| sha256sum -c -; \
+	chmod 0644 /usr/local/share/ca-certificates/cacert-2026-11-05.pem
 
 COPY file-upload.conf /usr/local/etc/php-fpm.d/file-upload.conf
 COPY opcache.ini /usr/local/etc/php/conf.d/opcache.ini
@@ -322,6 +309,7 @@ COPY cve-2026-109618-109619.patched /usr/local/etc/php/cve-2026-109618-109619.pa
 COPY --chmod=0644 cve-2026-109618-109619.ini /usr/local/etc/php/conf.d/zz-cve-2026-109618-109619.ini
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
 USER www-data:www-data
 
 ENTRYPOINT ["/entrypoint.sh"]

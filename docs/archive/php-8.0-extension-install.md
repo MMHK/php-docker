@@ -1,7 +1,12 @@
-# PHP 8.0 擴充安裝方案（PECL 固定 tarball）
+# PHP 8.0 擴充安裝方案（PECL 固定 tarball）— 已廢止
 
+> ⛔ **此文件描述的 `install-php-extensions` / `.so` 流程已被取代，僅保留作為歷史紀錄。**
+> 現行做法為「靜態內嵌」：見 `docs/plans/php-8.0-static-extensions.md`。
+> `scripts/install-extensions.sh`、`docker-php-ext-install`、`docker-php-ext-configure`
+> 與 `install-php-extensions` 均已從 repo 移除。
+>
 > 分支：`8.0-fpm`　｜　目標鏡像：`mmhk/php-docker:8.0-fpm`
-> 狀態：本機重裝驗證通過（第 6 節），CI 待驗
+> 狀態：歷史文件（原狀態：本機重裝驗證通過，CI 待驗）
 > 相關：`docs/plans/php-8.0-cve-2026-109618-109619-patch.md`（CVE 補丁方案）
 
 ---
