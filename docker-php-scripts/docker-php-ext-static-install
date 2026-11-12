@@ -2,8 +2,8 @@
 #
 # Statically embed PHP extensions into the php / php-fpm binaries.
 #
-# This is the static counterpart of docker-php-ext-install. It does NOT create
-# a .so and does NOT write an extension= ini. Adding a static extension
+# Unlike a shared extension installer, this does NOT create a .so and does NOT
+# write an extension= ini. Adding a static extension
 # requires re-running PHP's configure/make and relinking the binaries, so the
 # PHP source tree, the saved configure arguments and the compiler must still
 # be present. In this image that is the "builder" stage only; the runtime stage
@@ -11,8 +11,7 @@
 #
 # Because building extensions statically is a whole-PHP rebuild, system
 # dependencies of the requested extension must already be installed. This
-# script deliberately does not resolve apt/PECL dependencies (unlike
-# install-php-extensions).
+# script deliberately does not resolve apt/PECL dependencies.
 
 set -eu
 

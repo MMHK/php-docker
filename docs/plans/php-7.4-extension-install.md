@@ -1,7 +1,13 @@
 # PHP 7.4 擴充安裝方案（PECL 固定 tarball）
 
+> **歷史文件（已由靜態內嵌取代）**：`scripts/install-extensions.sh` 與
+> `install-php-extensions` 已在 2026-11-12 移除，實作改為
+> `scripts/build-php-static.sh` + `scripts/static-extensions.conf`。
+> 現行架構請看 `docs/plans/2026-11-12-php-7.4-static-extensions.md`；
+> 本文保留作為 PECL tarball / SHA256 pin 的來源與歷史決策記錄。
+
 > 分支：`7.4-fpm`　｜　目標鏡像：`mmhk/php-docker:7.4-fpm`
-> 狀態：**已實作並完成本機 amd64 驗證**（見 6.1 / 6.2）；arm64 待 CI
+> 狀態：**已被靜態內嵌方案取代**（原 IPE 實作見 6.1 / 6.2）
 > 參考：`php-8.0-extension-install.md`（8.0 分支已完成並驗證）
 > 相關：`docs/plans/php-7.4-cve-2026-109618-109619-patch.md`（CVE 補丁方案）
 
