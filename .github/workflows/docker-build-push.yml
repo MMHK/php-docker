@@ -1,5 +1,10 @@
 name: Build & Push Docker Hub
 
+# 參考 7.4-fpm 分支的 release.yml：多平台原生編譯（不使用 QEMU 模擬）。
+# 每個架構在自己的原生 runner 上建置，只以 digest 推送，
+# 最後由 merge job 合成單一 multi-arch manifest。
+# 這樣 push 完成前不會出現「只有單一平台」的半成品 tag。
+
 # Trigger on version tag push (e.g. v1.0.0 / 7.4-fpm-pgsql-v1.0.0)
 # and allow manual runs to push a specific tag.
 on:
@@ -14,26 +19,107 @@ on:
         required: false
         default: '7.4-fpm-pgsql'
 
+permissions:
+  contents: read
+  packages: write
+
+# 同一時間只跑一份發佈流程，避免兩個 tag 互相覆蓋 manifest
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: mmhk/php-docker
 
 jobs:
-  build-and-push:
-    name: Build & push multi-arch image
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+  # ------------------------------------------------------------------
+  # 每個架構在自己的原生機器上建置，不使用 QEMU 模擬。
+  # amd64 走 ubuntu-latest（x86_64），arm64 走 ubuntu-24.04-arm（原生 arm64）。
+  # ------------------------------------------------------------------
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      # Docker Hub 登入；push-by-digest 需要在 build job 內先登入
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # 建置器：原生單平台建置，不需要 setup-qemu-action
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # labels 在建置時寫入 image config；tag 留到 merge job 才掛上
+      - name: Extract labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+
+      # 只建置目前架構，並以 digest 推送（尚未產生最終 tag）
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: >-
+            type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          # 每個架構獨立的 cache scope，避免兩種架構搶同一份快取
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+
+      # 把 digest 交給 merge job（artifact 是矩陣 job 之間傳遞 digest 的標準做法）
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ------------------------------------------------------------------
+  # 把 amd64 + arm64 的 digest 合成單一 multi-arch manifest。
+  # 只有全部架構都建置成功才會執行，失敗時 Docker Hub 上的舊 tag 不會被動到。
+  # ------------------------------------------------------------------
+  merge:
+    name: Merge multi-arch manifest
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -41,7 +127,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 這裡才計算最終要掛上的 tag
+      - name: Extract metadata (tags)
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -49,20 +139,32 @@ jobs:
           tags: |
             # For tag pushes: use the git tag itself (e.g. 7.4-fpm-pgsql-v1.0.0)
             type=ref,event=tag
-            # For manual dispatch: use the input version
-            type=raw,value=${{ inputs.version }}
+            # For manual dispatch: use the input version（tag push 時停用，避免空字串 tag）
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
             # Always keep a stable branch tag
             type=raw,value=7.4-fpm-pgsql
             type=raw,value=latest
 
-      - name: Build and push to Docker Hub
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # 以 digest 為輸入建立 manifest list，並掛上所有計算出的 tag
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # 用陣列收集 digest，避免 shellcheck SC2046 的 word splitting 警告
+          sources=()
+          for digest in *; do
+            sources+=("${{ env.IMAGE_NAME }}@sha256:${digest}")
+          done
+
+          tags=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              tags+=("--tag" "$tag")
+            fi
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+
+      # 驗證產出的 tag 真的同時包含兩個平台
+      - name: Inspect multi-arch image
+        run: |
+          docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:7.4-fpm-pgsql"

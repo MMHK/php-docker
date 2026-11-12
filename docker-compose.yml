@@ -7,4 +7,5 @@ services:
       platforms:
         - "linux/amd64"
         - "linux/arm64"
-    image: mmhk/php-docker:7.4-fpm
+    # 不可用 7.4-fpm：那是本 Dockerfile 的基礎映像，會被同名 tag 覆蓋
+    image: mmhk/php-docker:7.4-fpm-pgsql

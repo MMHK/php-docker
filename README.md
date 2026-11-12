@@ -24,6 +24,8 @@
 |mysqli||
 |redis||
 |pdo_mysql||
+|pgsql||
+|pdo_pgsql||
 |opcache||
 |exif||
 |bcmath||
