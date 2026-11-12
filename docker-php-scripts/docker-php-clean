@@ -1,0 +1,74 @@
+#!/bin/sh
+#
+# Clean build inputs from the PHP image.
+#
+# IMPORTANT: Docker layers are immutable. Running this in a later RUN does not
+# shrink the image; the files still exist in the layer that created them. The
+# build must download, compile and clean in the same RUN (or use multi-stage).
+# This script is primarily useful inside the builder stage / a container.
+
+set -eu
+
+PHP_SRC=/usr/src/php
+PATCH_FILE=/usr/src/php-cve.patch
+TARBALL=/usr/src/php.tar.xz
+PECL_DIR=/usr/src/pecl
+
+usage() {
+	echo "usage: $0 COMMAND"
+	echo
+	echo "Commands:"
+	echo "   source  remove PHP source, tarball, patch and PECL staging"
+	echo "   deps    purge build toolchain and -dev packages (keeps runtime libs)"
+	echo "   all     source + deps"
+	echo
+	echo "docker-php-ext-static-install cannot work after 'source'."
+}
+
+clean_source() {
+	rm -rf "$PHP_SRC" "$TARBALL" "$PATCH_FILE" "$PECL_DIR"
+	rm -rf /tmp/pecl-build /tmp/pear /root/.pearrc 2>/dev/null || true
+}
+
+clean_deps() {
+	# Mark every runtime library used by the installed binaries as manual so
+	# apt-get autoremove does not delete it.
+	for bin in /usr/local/bin/php /usr/local/sbin/php-fpm \
+		/usr/local/lib/php/extensions/*/*.so; do
+		[ -e "$bin" ] || continue
+		ldd "$bin" 2>/dev/null || true
+	done \
+		| awk '/=>/ { so = $(NF-1); if (index(so, "/usr/local/") == 1) { next }; gsub("^/(usr/)?", "", so); print so }' \
+		| sort -u \
+		| xargs -r dpkg-query --search 2>/dev/null \
+		| cut -d: -f1 \
+		| sort -u \
+		| xargs -r apt-mark manual >/dev/null 2>&1 || true
+
+	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
+		${PHPIZE_DEPS:-} \
+		patch \
+		libbz2-dev libffi-dev libfreetype6-dev libjpeg62-turbo-dev \
+		libpng-dev libwebp-dev libxpm-dev libzip-dev libsnmp-dev \
+		libmcrypt-dev libmagickwand-dev libmemcached-dev libsasl2-dev \
+		liblz4-dev libzstd-dev \
+		|| true
+	rm -rf /var/lib/apt/lists/*
+}
+
+case "${1:-}" in
+	source)
+		clean_source
+		;;
+	deps)
+		clean_deps
+		;;
+	all)
+		clean_source
+		clean_deps
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac

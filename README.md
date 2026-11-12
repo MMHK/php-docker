@@ -57,9 +57,15 @@ backport 補丁修補 **CVE-2026-109618 / CVE-2026-109619**（PHP2Shell）：
 |shmop||
 |ffi||
 
-PECL 擴充（`memcached` `imagick` `mcrypt` `redis` `timezonedb`）以固定版本 + SHA256 的
-tarball 安裝（不走 PECL channel），`install-php-extensions` 亦固定為 2.12.3；
-原因與升版方式見 `docs/plans/php-7.4-extension-install.md`。
+上述擴充（除 `opcache` 外）在 builder stage 直接靜態編譯進 `php` / `php-fpm`，
+執行期不再有對應 `.so` 與 `extension=` ini；`opcache` 因 PHP 7.4 限制仍為 shared。
+PECL 擴充（`memcached` `imagick` `mcrypt` `redis` `timezonedb`）以固定版本 + SHA256
+tarball 取得，對照表為 `scripts/static-extensions.conf`。
+
+需要額外靜態擴充時，在 builder stage 使用
+`docker-php-ext-static-install <ext>`（需已有 `/usr/src/php` 與編譯器）；
+final image 已移除 source 與 toolchain，不能直接使用。詳見
+`docs/plans/2026-11-12-php-7.4-static-extensions.md`。
 
 
 ### RUN

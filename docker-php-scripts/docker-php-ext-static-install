@@ -1,0 +1,191 @@
+#!/bin/sh
+#
+# Statically embed PHP extensions into the php / php-fpm binaries.
+#
+# This is the static counterpart of docker-php-ext-install. It does NOT create
+# a .so and does NOT write an extension= ini. Adding a static extension
+# requires re-running PHP's configure/make and relinking the binaries, so the
+# PHP source tree, the saved configure arguments and the compiler must still
+# be present. In this image that is the "builder" stage only; the runtime stage
+# does not ship the source tree or toolchain.
+#
+# Because building extensions statically is a whole-PHP rebuild, system
+# dependencies of the requested extension must already be installed. This
+# script deliberately does not resolve apt/PECL dependencies (unlike
+# install-php-extensions).
+
+set -eu
+
+# prefer user supplied CFLAGS, but default to our PHP_CFLAGS
+: ${CFLAGS:=$PHP_CFLAGS}
+: ${CPPFLAGS:=$PHP_CPPFLAGS}
+: ${LDFLAGS:=$PHP_LDFLAGS}
+export CFLAGS CPPFLAGS LDFLAGS
+
+PHP_SRC=/usr/src/php
+BASE_ARGS_FILE="$PHP_SRC/.docker-configure-base"
+MANIFEST="$PHP_SRC/.docker-static-exts"
+STATIC_CONF="${STATIC_CONF:-/usr/local/share/php-docker/static-extensions.conf}"
+
+usage() {
+	echo "usage: $0 [-jN] [--configure-args \"...\"] [--clean] ext-name [ext-name ...]"
+	echo "   ie: $0 redis"
+	echo "       $0 -j4 gd mysqli pdo_mysql"
+	echo "       $0 --configure-args \"--with-foo-dir=/usr\" foo"
+	echo
+	echo "ext-name must exist as $PHP_SRC/ext/<name>/config.m4."
+	echo "For a PECL extension, extract its source there first, then pass the name."
+	echo
+	echo "The PHP source tree and saved configure arguments are required:"
+	echo "  $PHP_SRC"
+	echo "  $BASE_ARGS_FILE"
+	echo
+	echo "Use --clean to run docker-php-clean source after a successful rebuild."
+}
+
+j="$(nproc)"
+configure_args=
+clean=0
+remove=0
+
+opts="$(getopt -o 'h?j:' --long 'help,jobs:,configure-args:,clean,remove' -- "$@" || { usage >&2 && false; })"
+eval set -- "$opts"
+while true; do
+	flag="$1"
+	shift
+	case "$flag" in
+		--help|-h|'-?') usage && exit 0 ;;
+		--jobs|-j) j="$1" && shift ;;
+		--configure-args) configure_args="$1" && shift ;;
+		--clean) clean=1 ;;
+		--remove) remove=1 ;;
+		--) break ;;
+		*)
+			echo >&2 "error: unknown flag: $flag"
+			usage >&2
+			exit 1
+			;;
+	esac
+done
+
+[ "$(id -u)" = 0 ] || { echo >&2 "error: must run as root"; exit 1; }
+[ -d "$PHP_SRC" ] || { echo >&2 "error: $PHP_SRC missing (this only works in the builder stage)"; exit 1; }
+[ -f "$BASE_ARGS_FILE" ] || { echo >&2 "error: $BASE_ARGS_FILE missing"; exit 1; }
+[ -f "$MANIFEST" ] || : > "$MANIFEST"
+
+[ -n "${1:-}" ] || { usage >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# update manifest / stage sources
+# ---------------------------------------------------------------------------
+if [ "$remove" = 1 ]; then
+	for ext; do
+		[ -n "$ext" ] || continue
+		grep -vx "$ext" "$MANIFEST" > "$MANIFEST.tmp" || true
+		mv "$MANIFEST.tmp" "$MANIFEST"
+		echo ">>> removed from static manifest: $ext"
+	done
+else
+	for ext; do
+		[ -n "$ext" ] || continue
+
+		if [ -d "$ext" ] && [ -f "$ext/config.m4" ]; then
+			stage="$ext"
+			ext="$(basename "$stage")"
+			mkdir -p "$PHP_SRC/ext/$ext"
+			cp -a "$stage"/. "$PHP_SRC/ext/$ext"/
+			echo ">>> staged PECL source: $stage -> ext/$ext"
+		fi
+
+		[ -f "$PHP_SRC/ext/$ext/config.m4" ] || {
+			echo >&2 "error: $PHP_SRC/ext/$ext/config.m4 does not exist"
+			echo >&2 "       extract the extension source into that directory first"
+			exit 1
+		}
+
+		if grep -qx "$ext" "$MANIFEST"; then
+			echo ">>> already in static manifest: $ext"
+		else
+			echo "$ext" >> "$MANIFEST"
+			echo ">>> added to static manifest: $ext"
+		fi
+	done
+fi
+
+[ -s "$MANIFEST" ] || {
+	echo >&2 "error: static manifest is empty; refusing to rebuild PHP with no extensions"
+	exit 1
+}
+
+# ---------------------------------------------------------------------------
+# configure flags from manifest
+# ---------------------------------------------------------------------------
+EXT_FLAGS=
+for ext in $(cat "$MANIFEST"); do
+	flags="$(awk -F '\t' -v want="$ext" '$1 == want { print $2 }' "$STATIC_CONF" 2>/dev/null || true)"
+	if [ -z "$flags" ] && [ -f "$PHP_SRC/ext/$ext/config.m4" ]; then
+		if grep -q "PHP_ARG_ENABLE(\[$ext" "$PHP_SRC/ext/$ext/config.m4" 2>/dev/null \
+			|| grep -q "PHP_ARG_ENABLE($ext" "$PHP_SRC/ext/$ext/config.m4" 2>/dev/null; then
+			flags="--enable-$ext"
+		elif grep -q "PHP_ARG_WITH(\[$ext" "$PHP_SRC/ext/$ext/config.m4" 2>/dev/null \
+			|| grep -q "PHP_ARG_WITH($ext" "$PHP_SRC/ext/$ext/config.m4" 2>/dev/null; then
+			flags="--with-$ext"
+		fi
+	fi
+	[ -n "$flags" ] || {
+		echo >&2 "error: cannot derive configure flags for '$ext'"
+		echo >&2 "       add it to $STATIC_CONF or pass --configure-args"
+		exit 1
+	}
+	EXT_FLAGS="$EXT_FLAGS $flags"
+done
+
+# ---------------------------------------------------------------------------
+# rebuild PHP (incremental: existing .o files are reused)
+# ---------------------------------------------------------------------------
+cd "$PHP_SRC"
+
+if [ ! -f .docker-cve-patched ]; then
+	[ -f /usr/src/php-cve.patch ] || {
+		echo >&2 "error: source tree is not patched and /usr/src/php-cve.patch is missing"
+		exit 1
+	}
+	patch -p1 --fuzz=0 < /usr/src/php-cve.patch
+	touch .docker-cve-patched
+fi
+
+echo ">>> running buildconf --force"
+./buildconf --force
+
+set --
+while IFS= read -r arg; do
+	[ -n "$arg" ] && set -- "$@" "$arg"
+done < "$BASE_ARGS_FILE"
+for arg in $EXT_FLAGS $configure_args; do
+	set -- "$@" "$arg"
+done
+
+echo ">>> running configure"
+./configure "$@"
+
+echo ">>> compiling and installing"
+make -j "$j"
+make install
+find /usr/local/lib/php/extensions -type f -name '*.a' -delete
+
+echo ">>> stripping newly installed binaries"
+find /usr/local -type f -perm '/0111' -exec sh -euxc 'strip --strip-all "$@" || :' -- '{}' +
+
+# OPcache is always shared on PHP 7.4.
+if [ ! -f /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini ]; then
+	echo 'zend_extension=opcache.so' > /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
+fi
+
+echo ">>> verifying"
+php --version
+php -m
+php-fpm -t
+
+if [ "$clean" = 1 ]; then
+	docker-php-clean source
+fi
